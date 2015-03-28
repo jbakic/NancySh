@@ -63,19 +63,16 @@ namespace ShieldedDb.Data
         {
             AddOp<T, TKey>(entity, () => _conn.Execute(
                 string.Format("delete from {0} where Id = @Id", typeof(T).Name),
-                new { Id = entity.Id }));
+                new { entity.Id }));
         }
 
 
         void AddOp<T, TKey>(T entity, Action exe) where T : IEntity<TKey>
         {
-            if (!_queue.TryAdd(new Op {
+            _queue.Add(new Op {
                 EntityType = typeof(T),
                 Id = entity.Id,
-                Execute = exe }))
-            {
-                throw new ApplicationException("Too busy right now, sorry.");
-            }
+                Execute = exe });
         }
     }
 }
