@@ -17,7 +17,6 @@ namespace ShieldedDb.Data
 
         static Database()
         {
-            _deamon = new DataDeamon(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
             Shield.WhenCommitting(tf => {
                 if (_ctx == null || tf.All(field => field.Field != _ctx.Tests))
                     return;
@@ -30,6 +29,11 @@ namespace ShieldedDb.Data
                         _deamon.Insert(_ctx.Tests[key]);
                 }
             });
+        }
+
+        public static void StartDeamon()
+        {
+            _deamon = new DataDeamon(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
         }
 
         public static void StopDeamon()
@@ -50,12 +54,11 @@ namespace ShieldedDb.Data
 
             try
             {
-                _ctx = new Context(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
+                _ctx = new Context();
                 Shield.InTransaction(() => act(_ctx));
             }
             finally
             {
-                _ctx.Dispose();
                 _ctx = null;
             }
         }

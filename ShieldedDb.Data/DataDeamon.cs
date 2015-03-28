@@ -17,10 +17,10 @@ namespace ShieldedDb.Data
             public Action Execute;
         }
 
-        BlockingCollection<Op> _queue;
-        NpgsqlConnection _conn;
-        Thread _writer;
-        CancellationTokenSource _cancel;
+        readonly BlockingCollection<Op> _queue;
+        readonly NpgsqlConnection _conn;
+        readonly Thread _writer;
+        readonly CancellationTokenSource _cancel;
 
         internal DataDeamon(string connectionString)
         {
@@ -46,6 +46,7 @@ namespace ShieldedDb.Data
         public void Dispose()
         {
             _cancel.Cancel();
+            _conn.Dispose();
         }
 
         public void Insert(Test entity)

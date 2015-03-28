@@ -1,4 +1,5 @@
 ﻿@inherits Nancy.ViewEngines.Razor.NancyRazorViewBase<Test[]>
+@using nancySh
 <html>
 <head>
     <title>Portraits</title>
@@ -8,10 +9,7 @@
 
 <a href="/"><h1>Hello!</h1></a>
 
-<form method="post" action="/new">
-    @Html.AntiForgeryToken()
-    <input type="submit" value="New item"/>
-</form>
+@Html.PostButton("/new", "New item")
 
 <table class="table">
 @foreach (var t in Model) {
@@ -23,10 +21,7 @@
             @t.Val
         </td>
         <td>
-            <form method="post" action="/delete/@t.Id">
-                @Html.AntiForgeryToken()
-                <input type="submit" value="Delete"/>
-            </form>
+            @Html.PostButton(string.Format("/delete/{0}", t.Id), "Delete")
         </td>
     </tr>
 }
