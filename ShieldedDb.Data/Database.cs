@@ -2,12 +2,14 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
+using System.Reflection;
 
 using Dapper;
 using Shielded;
 using Npgsql;
 
 using ShieldedDb.Models;
+using Shielded.ProxyGen;
 
 namespace ShieldedDb.Data
 {
@@ -17,6 +19,10 @@ namespace ShieldedDb.Data
 
         static Database()
         {
+            var entityType = typeof(IEntity);
+            Factory.PrepareTypes(Assembly.GetAssembly(entityType)
+                .GetTypes().Where(t => t.IsClass && t.GetInterface(entityType.Name) != null).ToArray());
+
             Shield.WhenCommitting(tf => {
                 if (_ctx == null || tf.All(field => field.Field != _ctx.Tests))
                     return;
