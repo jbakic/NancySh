@@ -15,19 +15,19 @@ namespace nancySh
 
             Post["/delete/{Id:int}"] = parameters => {
                 this.ValidateCsrfToken();
-                return Database.Execute(ctx => {
+                Database.Execute(ctx => {
                     ctx.Tests.Remove(parameters.Id);
-                    return IndexView();
                 });
+                return IndexView();
             };
 
             Post["/new"] = _ => {
                 this.ValidateCsrfToken();
-                return Database.Execute(ctx => {
+                Database.Execute(ctx => {
                     var t = ctx.Tests.New(new Random().Next(1000));
                     t.Val = "Test " + t.Id;
-                    return IndexView();
                 });
+                return IndexView();
             };
         }
 
