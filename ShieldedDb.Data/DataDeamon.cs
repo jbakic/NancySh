@@ -39,6 +39,8 @@ namespace ShieldedDb.Data
                 _queue.CompleteAdding();
                 foreach (var op in _queue.GetConsumingEnumerable())
                     op.Execute();
+
+                _conn.Dispose();
             });
             _writer.Start();
         }
@@ -46,7 +48,6 @@ namespace ShieldedDb.Data
         public void Dispose()
         {
             _cancel.Cancel();
-            _conn.Dispose();
         }
 
         public void Insert(Test entity)
