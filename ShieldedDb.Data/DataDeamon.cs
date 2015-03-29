@@ -31,25 +31,30 @@ namespace ShieldedDb.Data
             _writer = new Thread(() => {
                 try
                 {
-                    foreach (var op in _queue.GetConsumingEnumerable(_cancel.Token))
+                    try
                     {
-                        try
+                        foreach (var op in _queue.GetConsumingEnumerable(_cancel.Token))
                         {
-                            op.Execute(conn);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine("Exception in deamon! {0}", ex);
+                            try
+                            {
+                                op.Execute(conn);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine("Exception in deamon! {0}", ex);
+                            }
                         }
                     }
+                    catch (OperationCanceledException) {}
+
+                    _queue.CompleteAdding();
+                    foreach (var op in _queue.GetConsumingEnumerable())
+                        op.Execute(conn);
                 }
-                catch (OperationCanceledException) {}
-
-                _queue.CompleteAdding();
-                foreach (var op in _queue.GetConsumingEnumerable())
-                    op.Execute(conn);
-
-                conn.Dispose();
+                finally
+                {
+                    conn.Dispose();
+                }
             });
             _writer.Start();
         }
