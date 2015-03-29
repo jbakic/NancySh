@@ -7,6 +7,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedDb.Models", "Shield
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedDb.Data", "ShieldedDb.Data\ShieldedDb.Data.csproj", "{A893D391-2123-44FE-8862-F4563A0C3930}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Sql", "Sql", "{DCE0FD90-A265-43C8-BF7C-43BA4B8D9884}"
+	ProjectSection(SolutionItems) = preProject
+		Sql\politik.sql = Sql\politik.sql
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -25,5 +30,7 @@ Global
 		{E583A382-62B2-4AF3-A336-0A72476E7B82}.Debug|x86.Build.0 = Debug|x86
 		{E583A382-62B2-4AF3-A336-0A72476E7B82}.Release|x86.ActiveCfg = Release|x86
 		{E583A382-62B2-4AF3-A336-0A72476E7B82}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
 	EndGlobalSection
 EndGlobal
