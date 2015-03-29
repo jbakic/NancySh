@@ -64,12 +64,15 @@ namespace ShieldedDb.Data
 
         internal static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
-            _refActions.TryAdd(dict, () => Process(dict));
-            _typeActions.TryAdd(typeof(T), o => {
-                var entity = (T)o;
-                if (entity.Saved && dict.ContainsKey(entity.Id))
-                    _deamon.Update(entity);
-            });
+            if (!_typeActions.TryAdd(typeof(T), o => {
+                    var entity = (T)o;
+                    if (entity.Saved && dict.ContainsKey(entity.Id))
+                        _deamon.Update(entity);
+                }))
+            {
+                throw new InvalidOperationException("This type already has a registered dictionary.");
+            }
+            _refActions[dict] = () => Process(dict);
         }
 
         static void Process<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()

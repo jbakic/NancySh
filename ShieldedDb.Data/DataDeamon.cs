@@ -75,8 +75,14 @@ namespace ShieldedDb.Data
         {
             var waitCancel = new ManualResetEventSlim();
             AddOp(conn => {
-                exe(conn);
-                waitCancel.Set();
+                try
+                {
+                    exe(conn);
+                }
+                finally
+                {
+                    waitCancel.Set();
+                }
             });
             waitCancel.Wait();
         }
