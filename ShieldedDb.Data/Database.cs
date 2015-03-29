@@ -124,13 +124,6 @@ namespace ShieldedDb.Data
             });
             return res;
         }
-
-        internal static void QuietTransaction(Action act)
-        {
-            if (_ctx != null)
-                throw new InvalidOperationException("The operation cannot be done within a transaction.");
-            Shield.InTransaction(act);
-        }
     }
 }
 

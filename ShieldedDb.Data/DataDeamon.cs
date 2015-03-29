@@ -91,7 +91,7 @@ namespace ShieldedDb.Data
             BlockForOp(conn => {
                 string name = typeof(T).Name;
                 Debug.WriteLine("Selecting entities {0}", (object)name);
-                Database.QuietTransaction(() => {
+                Shield.InTransaction(() => {
                     if (dict.Value != null)
                         return;
                     dict.Value = new ShieldedDict<TKey, T>(
@@ -105,8 +105,11 @@ namespace ShieldedDb.Data
         public void Insert<T>(T entity) where T : IEntity
         {
             AddOp(conn => {
-                Debug.WriteLine("Inserting entity {0}", entity);
-                conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
+                Shield.InTransaction(() => {
+                    Debug.WriteLine("Inserting entity {0}", entity);
+                    conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
+                });
+                // split, so the writing transaction (above) is never retried.
                 Shield.InTransaction(
                     () => { entity.Saved = true; });
             });
@@ -114,10 +117,10 @@ namespace ShieldedDb.Data
 
         public void Update<T>(T entity) where T : IEntity
         {
-            AddOp(conn => {
+            AddOp(conn => Shield.InTransaction(() => {
                 Debug.WriteLine("Updating entity {0}", entity);
                 conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity);
-            });
+            }));
         }
 
         public void Delete<T, TKey>(TKey id) where T : IEntity<TKey>
