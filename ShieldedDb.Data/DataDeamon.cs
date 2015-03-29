@@ -8,6 +8,8 @@ using Npgsql;
 using Shielded;
 using System.Text;
 using System.Data;
+using System.Diagnostics;
+using System.Collections.Generic;
 
 namespace ShieldedDb.Data
 {
@@ -69,9 +71,42 @@ namespace ShieldedDb.Data
             _queue.Add(new Op { Execute = exe });
         }
 
+        void BlockForOp(Action<IDbConnection> exe)
+        {
+            var waitCancel = new ManualResetEventSlim();
+            _queue.Add(new Op {
+                Execute = conn => {
+                    exe(conn);
+                    waitCancel.Set();
+                }
+            });
+            waitCancel.Wait();
+        }
+
+        /// <summary>
+        /// The deamon does all the work on a separate thread, and in a transaction which is
+        /// not tracked by the Database class. This way we avoid triggering UPDATE commands
+        /// for these entities. If this is called from a transaction, that transaction
+        /// should rollback before reading the dictionary.
+        /// </summary>
+        public ShieldedDict<TKey, T> LoadDict<T, TKey>() where T : class, IEntity<TKey>, new()
+        {
+            ShieldedDict<TKey, T> dict = null;
+            BlockForOp(conn => {
+                string name = typeof(T).Name;
+                Debug.WriteLine("Selecting entities {0}", (object)name);
+                Database.QuietTransaction(() =>
+                    dict = new ShieldedDict<TKey, T>(
+                        conn.Query<T>(string.Format("select * from {0}", name))
+                            .Select(t => new KeyValuePair<TKey, T>(t.Id, MapFromDb.Map(t)))));
+            });
+            return dict;
+        }
+
         public void Insert<T>(T entity) where T : IEntity
         {
             AddOp(conn => {
+                Debug.WriteLine("Inserting entity {0}", entity);
                 conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
                 Shield.InTransaction(
                     () => { entity.Saved = true; });
@@ -80,15 +115,19 @@ namespace ShieldedDb.Data
 
         public void Update<T>(T entity) where T : IEntity
         {
-            AddOp(conn =>
-                conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity));
+            AddOp(conn => {
+                Debug.WriteLine("Updating entity {0}", entity);
+                conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity);
+            });
         }
 
         public void Delete<T, TKey>(TKey id) where T : IEntity<TKey>
         {
-            AddOp(conn => conn.Execute(
-                string.Format("delete from {0} where Id = @id", typeof(T).Name),
-                new { id }));
+            AddOp(conn => {
+                Debug.WriteLine("Deleting entity {0}[{1}]", typeof(T).Name, id);
+                conn.Execute(string.Format("delete from {0} where Id = @id", typeof(T).Name),
+                    new { id });
+            });
         }
 
         #region Insert SQL

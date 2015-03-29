@@ -10,33 +10,18 @@ using Shielded;
 using Shielded.ProxyGen;
 using Npgsql;
 using ShieldedDb.Models;
+using System.Threading;
 
 namespace ShieldedDb.Data
 {
     public static class Database
     {
         static DataDeamon _deamon;
-        static string _connectionString;
-
-        internal static IDbConnection NewConnection()
-        {
-            return new NpgsqlConnection(_connectionString);
-        }
 
         static readonly ConcurrentDictionary<object, Action> _refActions =
             new ConcurrentDictionary<object, Action>();
         static readonly ConcurrentDictionary<Type, Action<object>> _typeActions =
             new ConcurrentDictionary<Type, Action<object>>();
-
-        internal static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
-        {
-            _refActions.TryAdd(dict, () => Process(dict));
-            _typeActions.TryAdd(typeof(T), o => {
-                var entity = (T)o;
-                if (dict.ContainsKey(entity.Id))
-                    _deamon.Update(entity);
-            });
-        }
 
         static Database()
         {
@@ -65,20 +50,48 @@ namespace ShieldedDb.Data
             });
         }
 
+        /// <summary>
+        /// A dictionary is needed, but missing. The dict is loaded on another thread, while this thread
+        /// waits. After waiting, current transaction is rolled back, to be able to read the new dictionary.
+        /// During the wait, a lock is held to stop others from trying to load the same dictionary.
+        /// </summary>
+        internal static void DictionaryFault<TKey, T>(object sync, ref ShieldedDict<TKey, T> dict) where T : class, IEntity<TKey>, new()
+        {
+            lock (sync)
+            {
+                if (dict != null)
+                    return;
+                var newDict = _deamon.LoadDict<T, TKey>();
+                RegisterDictionary(newDict);
+                dict = newDict;
+            }
+            Shield.Rollback();
+        }
+
+        static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
+        {
+            _refActions.TryAdd(dict, () => Process(dict));
+            _typeActions.TryAdd(typeof(T), o => {
+                var entity = (T)o;
+                if (entity.Saved && dict.ContainsKey(entity.Id))
+                    _deamon.Update(entity);
+            });
+        }
+
         static void Process<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
             foreach (var key in dict.Changes)
             {
-                if (!dict.ContainsKey(key))
+                T entity;
+                if (!dict.TryGetValue(key, out entity))
                     _deamon.Delete<T, TKey>(key);
-                else
-                    _deamon.Insert(dict[key]);
+                else if (!entity.Saved)
+                    _deamon.Insert(entity);
             }
         }
 
         public static void StartDeamon(string connectionString)
         {
-            _connectionString = connectionString;
             _deamon = new DataDeamon(connectionString);
         }
 
@@ -116,6 +129,13 @@ namespace ShieldedDb.Data
                 res = f(ctx);
             });
             return res;
+        }
+
+        internal static void QuietTransaction(Action act)
+        {
+            if (_ctx != null)
+                throw new InvalidOperationException("The operation cannot be done within a transaction.");
+            Shield.InTransaction(act);
         }
     }
 }
