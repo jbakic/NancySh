@@ -7,6 +7,7 @@ using Dapper;
 using Npgsql;
 using Shielded;
 using System.Text;
+using System.Data;
 
 namespace ShieldedDb.Data
 {
@@ -14,22 +15,19 @@ namespace ShieldedDb.Data
     {
         class Op
         {
-            public Type EntityType;
-            public object Id;
-            public Action Execute;
+            public Action<IDbConnection> Execute;
         }
 
         readonly BlockingCollection<Op> _queue;
-        readonly NpgsqlConnection _conn;
         readonly Thread _writer;
         readonly CancellationTokenSource _cancel;
 
         internal DataDeamon(string connectionString)
         {
-            _conn = new NpgsqlConnection(connectionString);
             _queue = new BlockingCollection<Op>(20);
             _cancel = new CancellationTokenSource();
 
+            var conn = new NpgsqlConnection(connectionString);
             _writer = new Thread(() => {
                 try
                 {
@@ -37,7 +35,7 @@ namespace ShieldedDb.Data
                     {
                         try
                         {
-                            op.Execute();
+                            op.Execute(conn);
                         }
                         catch (Exception ex)
                         {
@@ -49,9 +47,9 @@ namespace ShieldedDb.Data
 
                 _queue.CompleteAdding();
                 foreach (var op in _queue.GetConsumingEnumerable())
-                    op.Execute();
+                    op.Execute(conn);
 
-                _conn.Dispose();
+                conn.Dispose();
             });
             _writer.Start();
         }
@@ -61,34 +59,31 @@ namespace ShieldedDb.Data
             _cancel.Cancel();
         }
 
-        void AddOp<T, TKey>(T entity, Action exe) where T : IEntity<TKey>
+        void AddOp(Action<IDbConnection> exe)
         {
-            _queue.Add(new Op {
-                EntityType = typeof(T),
-                Id = entity.Id,
-                Execute = exe });
+            _queue.Add(new Op { Execute = exe });
         }
 
-        public void Insert<T, TKey>(T entity) where T : IEntity<TKey>
+        public void Insert<T>(T entity) where T : IEntity
         {
-            AddOp<T, TKey>(entity, () => {
-                _conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
+            AddOp(conn => {
+                conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
                 Shield.InTransaction(
                     () => { entity.Saved = true; });
             });
         }
 
-        public void Update<T, TKey>(T entity) where T : IEntity<TKey>
+        public void Update<T>(T entity) where T : IEntity
         {
-            AddOp<T, TKey>(entity, () =>
-                _conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity));
+            AddOp(conn =>
+                conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity));
         }
 
-        public void Delete<T, TKey>(T entity) where T : IEntity<TKey>
+        public void Delete<T, TKey>(TKey id) where T : IEntity<TKey>
         {
-            AddOp<T, TKey>(entity, () => _conn.Execute(
-                string.Format("delete from {0} where Id = @Id", typeof(T).Name),
-                new { entity.Id }));
+            AddOp(conn => conn.Execute(
+                string.Format("delete from {0} where Id = @id", typeof(T).Name),
+                new { id }));
         }
 
         #region Insert SQL

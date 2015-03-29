@@ -2,12 +2,14 @@
 
 namespace ShieldedDb.Models
 {
-    public interface IEntity { }
+    public interface IEntity
+    {
+        bool Saved { get; set; }
+    }
 
     public interface IEntity<TKey> : IEntity
     {
         TKey Id { get; set; }
-        bool Saved { get; set; }
     }
 }
 

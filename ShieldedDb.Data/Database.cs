@@ -34,7 +34,7 @@ namespace ShieldedDb.Data
             _typeActions.TryAdd(typeof(T), o => {
                 var entity = (T)o;
                 if (dict.ContainsKey(entity.Id))
-                    _deamon.Update<T, TKey>(entity);
+                    _deamon.Update(entity);
             });
         }
 
@@ -70,9 +70,9 @@ namespace ShieldedDb.Data
             foreach (var key in dict.Changes)
             {
                 if (!dict.ContainsKey(key))
-                    _deamon.Delete<T, TKey>(new T { Id = key });
+                    _deamon.Delete<T, TKey>(key);
                 else
-                    _deamon.Insert<T, TKey>(dict[key]);
+                    _deamon.Insert(dict[key]);
             }
         }
 
