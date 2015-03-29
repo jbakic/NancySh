@@ -1,21 +1,42 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Data;
 using System.Linq;
 using System.Reflection;
-
 using Dapper;
 using Shielded;
-using Npgsql;
-
-using ShieldedDb.Models;
 using Shielded.ProxyGen;
+using Npgsql;
+using ShieldedDb.Models;
 
 namespace ShieldedDb.Data
 {
     public static class Database
     {
         static DataDeamon _deamon;
+        static string _connectionString;
+
+        internal static IDbConnection NewConnection()
+        {
+            return new NpgsqlConnection(_connectionString);
+        }
+
+        static readonly ConcurrentDictionary<object, Action> _refActions =
+            new ConcurrentDictionary<object, Action>();
+        static readonly ConcurrentDictionary<Type, Action<object>> _typeActions =
+            new ConcurrentDictionary<Type, Action<object>>();
+
+        internal static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
+        {
+            _refActions.TryAdd(dict, () => Process(dict));
+            _typeActions.TryAdd(typeof(T), o => {
+                var entity = (T)o;
+                if (dict.ContainsKey(entity.Id))
+                    _deamon.Update<T, TKey>(entity);
+            });
+        }
 
         static Database()
         {
@@ -24,22 +45,41 @@ namespace ShieldedDb.Data
                 .GetTypes().Where(t => t.IsClass && t.GetInterface(entityType.Name) != null).ToArray());
 
             Shield.WhenCommitting(tf => {
-                if (_ctx == null || tf.All(field => field.Field != _ctx.Tests))
+                if (_ctx == null)
                     return;
 
-                foreach (var key in ((ShieldedDict<int, Test>)_ctx.Tests).Changes)
+                foreach (var f in tf)
                 {
-                    if (!_ctx.Tests.ContainsKey(key))
-                        _deamon.Delete<Test, int>(new Test { Id = key });
-                    else
-                        _deamon.Insert(_ctx.Tests[key]);
+                    if (!f.HasChanges) continue;
+
+                    Action act;
+                    if (_refActions.TryGetValue(f.Field, out act))
+                    {
+                        act();
+                        continue;
+                    }
+                    Action<object> actObj;
+                    if (_typeActions.TryGetValue(f.Field.GetType().BaseType, out actObj))
+                        actObj(f.Field);
                 }
             });
         }
 
-        public static void StartDeamon()
+        static void Process<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
-            _deamon = new DataDeamon(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
+            foreach (var key in dict.Changes)
+            {
+                if (!dict.ContainsKey(key))
+                    _deamon.Delete<T, TKey>(new T { Id = key });
+                else
+                    _deamon.Insert<T, TKey>(dict[key]);
+            }
+        }
+
+        public static void StartDeamon(string connectionString)
+        {
+            _connectionString = connectionString;
+            _deamon = new DataDeamon(connectionString);
         }
 
         public static void StopDeamon()

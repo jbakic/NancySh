@@ -7,25 +7,34 @@
 </head>
 <body>
 
-<h1><a href="/">Hello!</a></h1>
+<div class="header col-xs-12">
+    <h1><a href="/">Hello!</a></h1>
+</div>
 
 @Html.PostButton("/new", "New item")
 
-<table class="table">
-@foreach (var t in Model) {
-    <tr>
-        <td>
-            @(t.Id.ToString() + (t.Saved ? "" : " *"))
-        </td>
-        <td>
-            @t.Val
-        </td>
-        <td>
-            @Html.PostButton(string.Format("/delete/{0}", t.Id), "Delete")
-        </td>
-    </tr>
-}
-</table>
+<div class="col-lg-4">
+    <table class="table">
+    @foreach (var t in Model) {
+        <tr>
+            <td>
+                @(t.Id.ToString() + (t.Saved ? "" : " *"))
+            </td>
+            <td>
+                <form id="form@t.Id" method="post" action="/update">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="Id" value="@t.Id"/>
+                    <input type="text" name="Val" value="@t.Val"/>
+                    <input type="submit" value="Edit"/>
+                </form>
+            </td>
+            <td>
+                @Html.PostButton(string.Format("/delete/{0}", t.Id), "Delete")
+            </td>
+        </tr>
+    }
+    </table>
+</div>
 
 
 <script src="/js/jquery-2.1.3.min.js"></script>

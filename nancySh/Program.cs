@@ -2,6 +2,7 @@
 using Nancy.Hosting.Self;
 using Nancy;
 using ShieldedDb.Data;
+using System.Configuration;
 
 namespace nancySh
 {
@@ -14,7 +15,7 @@ namespace nancySh
             StaticConfiguration.DisableErrorTraces = false;
             try
             {
-                Database.StartDeamon();
+                Database.StartDeamon(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
                 using (var host = new NancyHost(new Uri("http://127.0.0.1:8080/"), new Application()))
                 {
                     host.Start();

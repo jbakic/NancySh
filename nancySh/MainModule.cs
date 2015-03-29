@@ -4,6 +4,7 @@ using Nancy;
 using Nancy.Security;
 using ShieldedDb.Data;
 using ShieldedDb.Models;
+using Nancy.ModelBinding;
 
 namespace nancySh
 {
@@ -18,7 +19,17 @@ namespace nancySh
                 Database.Execute(ctx => {
                     ctx.Tests.Remove(parameters.Id);
                 });
-                return IndexView();
+                return Response.AsRedirect("/");
+            };
+
+            Post["/update"] = parameters => {
+                this.ValidateCsrfToken();
+                var data = this.Bind<Test>();
+                Database.Execute(ctx => {
+                    var shT = ctx.Tests[data.Id];
+                    shT.Val = data.Val;
+                });
+                return Response.AsRedirect("/");
             };
 
             Post["/new"] = _ => {
@@ -27,7 +38,7 @@ namespace nancySh
                     var t = ctx.Tests.New(new Random().Next(1000));
                     t.Val = "Test " + t.Id;
                 });
-                return IndexView();
+                return Response.AsRedirect("/");
             };
         }
 

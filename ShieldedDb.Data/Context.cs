@@ -31,7 +31,7 @@ namespace ShieldedDb.Data
                 {
                     if (_tests != null)
                         return _tests;
-                    using (var conn = new NpgsqlConnection(ConfigurationManager.AppSettings["DatabaseConnectionString"]))
+                    using (var conn = Database.NewConnection())
                         _tests = new ShieldedDict<int, Test>(
                             conn.Query<Test>("select * from test")
                                 .Select(t => {
@@ -41,6 +41,7 @@ namespace ShieldedDb.Data
                                     shT.Saved = true;
                                     return new KeyValuePair<int, Test>(t.Id, shT);
                                 }));
+                    Database.RegisterDictionary(_tests);
                 }
                 return _tests;
             }

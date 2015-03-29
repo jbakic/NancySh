@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Threading;
 using ShieldedDb.Models;
 using Dapper;
 using Npgsql;
 using Shielded;
+using System.Text;
 
 namespace ShieldedDb.Data
 {
@@ -32,9 +34,18 @@ namespace ShieldedDb.Data
                 try
                 {
                     foreach (var op in _queue.GetConsumingEnumerable(_cancel.Token))
-                        op.Execute();
+                    {
+                        try
+                        {
+                            op.Execute();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine("Exception in deamon! {0}", ex);
+                        }
+                    }
                 }
-                catch {}
+                catch (OperationCanceledException) {}
 
                 _queue.CompleteAdding();
                 foreach (var op in _queue.GetConsumingEnumerable())
@@ -50,13 +61,53 @@ namespace ShieldedDb.Data
             _cancel.Cancel();
         }
 
-        public void Insert(Test entity)
+        string GetInsertSql(Type entityType)
         {
-            AddOp<Test, int>(entity, () => {
-                _conn.Execute("insert into test (Id, Val) values (@Id, @Val)", entity);
+            var props = entityType.GetProperties().Where(pi => pi.Name != "Saved");
+            StringBuilder sb = new StringBuilder();
+            sb.Append("insert into ");
+            sb.Append(entityType.Name);
+            sb.Append(" (");
+            sb.Append(string.Join(", ", props.Select(p => p.Name)));
+            sb.Append(") values (");
+            sb.Append(string.Join(", ", props.Select(p => "@" + p.Name)));
+            sb.Append(")");
+            return sb.ToString();
+        }
+
+        static readonly ConcurrentDictionary<Type, string> _insertSqls =
+            new ConcurrentDictionary<Type, string>();
+
+        public void Insert<T, TKey>(T entity) where T : IEntity<TKey>
+        {
+            var sql = _insertSqls.GetOrAdd(typeof(T), GetInsertSql);
+            AddOp<T, TKey>(entity, () => {
+                _conn.Execute(sql, entity);
                 Shield.InTransaction(
                     () => { entity.Saved = true; });
             });
+        }
+
+        string GetUpdateSql(Type entityType)
+        {
+            var props = entityType.GetProperties()
+                .Where(pi => pi.Name != "Id" && pi.Name != "Saved");
+            StringBuilder sb = new StringBuilder();
+            sb.Append("update ");
+            sb.Append(entityType.Name);
+            sb.Append(" set ");
+            sb.Append(string.Join(", ", props.Select(p => p.Name + " = @" + p.Name)));
+            sb.Append(" where Id = @Id");
+            return sb.ToString();
+        }
+
+        static readonly ConcurrentDictionary<Type, string> _updateSqls =
+            new ConcurrentDictionary<Type, string>();
+
+        public void Update<T, TKey>(T entity) where T : IEntity<TKey>
+        {
+            var sql = _updateSqls.GetOrAdd(typeof(T), GetUpdateSql);
+            AddOp<T, TKey>(entity, () => _conn.Execute(sql, entity));
         }
 
         public void Delete<T, TKey>(T entity) where T : IEntity<TKey>
