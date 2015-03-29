@@ -53,22 +53,16 @@ namespace ShieldedDb.Data
         /// <summary>
         /// A dictionary is needed, but missing. The dict is loaded on another thread, while this thread
         /// waits. After waiting, current transaction is rolled back, to be able to read the new dictionary.
-        /// During the wait, a lock is held to stop others from trying to load the same dictionary.
         /// </summary>
-        internal static void DictionaryFault<TKey, T>(object sync, ref ShieldedDict<TKey, T> dict) where T : class, IEntity<TKey>, new()
+        internal static void DictionaryFault<TKey, T>(Shielded<ShieldedDict<TKey, T>> dict) where T : class, IEntity<TKey>, new()
         {
-            lock (sync)
-            {
-                if (dict != null)
-                    return;
-                var newDict = _deamon.LoadDict<T, TKey>();
-                RegisterDictionary(newDict);
-                dict = newDict;
-            }
+            if (dict.Value != null)
+                throw new InvalidOperationException();
+            _deamon.LoadDict<T, TKey>(dict);
             Shield.Rollback();
         }
 
-        static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
+        internal static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
             _refActions.TryAdd(dict, () => Process(dict));
             _typeActions.TryAdd(typeof(T), o => {

@@ -18,18 +18,17 @@ namespace ShieldedDb.Data
         {
         }
 
-        static ShieldedDict<int, Test> _tests;
-        static readonly object _testsLock = new object();
-
         public IDictionary<int, Test> Tests
         {
             get
             {
-                if (_tests == null)
-                    Database.DictionaryFault(_testsLock, ref _tests);
-                return _tests;
+                if (_tests.Value == null)
+                    Database.DictionaryFault(_tests);
+                return _tests.Value;
             }
         }
+        static readonly Shielded<ShieldedDict<int, Test>> _tests =
+            new Shielded<ShieldedDict<int, Test>>();
     }
 }
 

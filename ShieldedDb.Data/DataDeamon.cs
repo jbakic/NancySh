@@ -74,33 +74,32 @@ namespace ShieldedDb.Data
         void BlockForOp(Action<IDbConnection> exe)
         {
             var waitCancel = new ManualResetEventSlim();
-            _queue.Add(new Op {
-                Execute = conn => {
-                    exe(conn);
-                    waitCancel.Set();
-                }
+            AddOp(conn => {
+                exe(conn);
+                waitCancel.Set();
             });
             waitCancel.Wait();
         }
 
         /// <summary>
-        /// The deamon does all the work on a separate thread, and in a transaction which is
-        /// not tracked by the Database class. This way we avoid triggering UPDATE commands
-        /// for these entities. If this is called from a transaction, that transaction
-        /// should rollback before reading the dictionary.
+        /// The deamon does the loading on his own thread, to avoid triggering
+        /// UPDATE commands for the entities. If this is called from a transaction,
+        /// that transaction should rollback to be able to read the dictionary.
         /// </summary>
-        public ShieldedDict<TKey, T> LoadDict<T, TKey>() where T : class, IEntity<TKey>, new()
+        public void LoadDict<T, TKey>(Shielded<ShieldedDict<TKey, T>> dict) where T : class, IEntity<TKey>, new()
         {
-            ShieldedDict<TKey, T> dict = null;
             BlockForOp(conn => {
                 string name = typeof(T).Name;
                 Debug.WriteLine("Selecting entities {0}", (object)name);
-                Database.QuietTransaction(() =>
-                    dict = new ShieldedDict<TKey, T>(
+                Database.QuietTransaction(() => {
+                    if (dict.Value != null)
+                        return;
+                    dict.Value = new ShieldedDict<TKey, T>(
                         conn.Query<T>(string.Format("select * from {0}", name))
-                            .Select(t => new KeyValuePair<TKey, T>(t.Id, MapFromDb.Map(t)))));
+                        .Select(t => new KeyValuePair<TKey, T>(t.Id, MapFromDb.Map(t))));
+                    Database.RegisterDictionary(dict.Value);
+                });
             });
-            return dict;
         }
 
         public void Insert<T>(T entity) where T : IEntity
