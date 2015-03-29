@@ -61,6 +61,38 @@ namespace ShieldedDb.Data
             _cancel.Cancel();
         }
 
+        void AddOp<T, TKey>(T entity, Action exe) where T : IEntity<TKey>
+        {
+            _queue.Add(new Op {
+                EntityType = typeof(T),
+                Id = entity.Id,
+                Execute = exe });
+        }
+
+        public void Insert<T, TKey>(T entity) where T : IEntity<TKey>
+        {
+            AddOp<T, TKey>(entity, () => {
+                _conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
+                Shield.InTransaction(
+                    () => { entity.Saved = true; });
+            });
+        }
+
+        public void Update<T, TKey>(T entity) where T : IEntity<TKey>
+        {
+            AddOp<T, TKey>(entity, () =>
+                _conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity));
+        }
+
+        public void Delete<T, TKey>(T entity) where T : IEntity<TKey>
+        {
+            AddOp<T, TKey>(entity, () => _conn.Execute(
+                string.Format("delete from {0} where Id = @Id", typeof(T).Name),
+                new { entity.Id }));
+        }
+
+        #region Insert SQL
+
         string GetInsertSql(Type entityType)
         {
             var props = entityType.GetProperties().Where(pi => pi.Name != "Saved");
@@ -78,15 +110,9 @@ namespace ShieldedDb.Data
         static readonly ConcurrentDictionary<Type, string> _insertSqls =
             new ConcurrentDictionary<Type, string>();
 
-        public void Insert<T, TKey>(T entity) where T : IEntity<TKey>
-        {
-            var sql = _insertSqls.GetOrAdd(typeof(T), GetInsertSql);
-            AddOp<T, TKey>(entity, () => {
-                _conn.Execute(sql, entity);
-                Shield.InTransaction(
-                    () => { entity.Saved = true; });
-            });
-        }
+        #endregion
+
+        #region Update SQL
 
         string GetUpdateSql(Type entityType)
         {
@@ -104,27 +130,7 @@ namespace ShieldedDb.Data
         static readonly ConcurrentDictionary<Type, string> _updateSqls =
             new ConcurrentDictionary<Type, string>();
 
-        public void Update<T, TKey>(T entity) where T : IEntity<TKey>
-        {
-            var sql = _updateSqls.GetOrAdd(typeof(T), GetUpdateSql);
-            AddOp<T, TKey>(entity, () => _conn.Execute(sql, entity));
-        }
-
-        public void Delete<T, TKey>(T entity) where T : IEntity<TKey>
-        {
-            AddOp<T, TKey>(entity, () => _conn.Execute(
-                string.Format("delete from {0} where Id = @Id", typeof(T).Name),
-                new { entity.Id }));
-        }
-
-
-        void AddOp<T, TKey>(T entity, Action exe) where T : IEntity<TKey>
-        {
-            _queue.Add(new Op {
-                EntityType = typeof(T),
-                Id = entity.Id,
-                Execute = exe });
-        }
+        #endregion
     }
 }
 
