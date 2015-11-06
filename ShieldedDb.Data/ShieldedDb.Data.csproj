@@ -30,14 +30,16 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
-    <Reference Include="Npgsql" />
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.1.1.3\lib\net40\Shielded.dll</HintPath>
-    </Reference>
     <Reference Include="System.Configuration" />
     <Reference Include="Dapper">
-      <HintPath>..\packages\Dapper.1.39\lib\net45\Dapper.dll</HintPath>
+      <HintPath>..\packages\Dapper.1.42\lib\net45\Dapper.dll</HintPath>
+    </Reference>
+    <Reference Include="Npgsql">
+      <HintPath>..\packages\Npgsql.3.0.3\lib\net45\Npgsql.dll</HintPath>
+    </Reference>
+    <Reference Include="Shielded">
+      <HintPath>..\packages\Shielded.4.0.3\lib\net40\Shielded.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -45,8 +47,8 @@
     <Compile Include="Database.cs" />
     <Compile Include="Context.cs" />
     <Compile Include="ContextExt.cs" />
-    <Compile Include="DataDeamon.cs" />
     <Compile Include="MapFromDb.cs" />
+    <Compile Include="Connection.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

@@ -27,8 +27,7 @@ namespace ShieldedDb.Data
                 return _tests.Value;
             }
         }
-        static readonly Shielded<ShieldedDict<int, Test>> _tests =
-            new Shielded<ShieldedDict<int, Test>>();
+        static readonly Shielded<ShieldedDict<int, Test>> _tests = new Shielded<ShieldedDict<int, Test>>();
     }
 }
 

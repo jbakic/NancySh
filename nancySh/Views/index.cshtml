@@ -18,7 +18,7 @@
     @foreach (var t in Model) {
         <tr>
             <td>
-                @(t.Id.ToString() + (t.Saved ? "" : " *"))
+                @t.Id.ToString()
             </td>
             <td>
                 <form id="form@t.Id" method="post" action="/update">
@@ -36,8 +36,7 @@
     </table>
 </div>
 
-
-<script src="/js/jquery-2.1.3.min.js"></script>
+<script src="/js/jquery-2.1.4.min.js"></script>
 <script src="/js/bootstrap.min.js"></script>
 
 </body>

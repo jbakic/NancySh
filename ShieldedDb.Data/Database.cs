@@ -16,12 +16,12 @@ namespace ShieldedDb.Data
 {
     public static class Database
     {
-        static DataDeamon _deamon;
-
         static readonly ConcurrentDictionary<object, Action> _refActions =
             new ConcurrentDictionary<object, Action>();
         static readonly ConcurrentDictionary<Type, Action<object>> _typeActions =
             new ConcurrentDictionary<Type, Action<object>>();
+
+        static Connection _conn;
 
         static Database()
         {
@@ -29,48 +29,66 @@ namespace ShieldedDb.Data
             Factory.PrepareTypes(Assembly.GetAssembly(entityType)
                 .GetTypes().Where(t => t.IsClass && t.GetInterface(entityType.Name) != null).ToArray());
 
-            Shield.WhenCommitting(tf => {
-                if (_ctx == null)
-                    return;
+            Shield.WhenCommitting(OnCommitting);
+        }
 
-                foreach (var f in tf)
+        static void OnCommitting(IEnumerable<TransactionField> tf)
+        {
+            if (_ctx == null)
+                return;
+            foreach (var f in tf)
+            {
+                if (!f.HasChanges) continue;
+
+                Action act;
+                if (_refActions.TryGetValue(f.Field, out act))
                 {
-                    if (!f.HasChanges) continue;
-
-                    Action act;
-                    if (_refActions.TryGetValue(f.Field, out act))
-                    {
-                        act();
-                        continue;
-                    }
-                    Action<object> actObj;
-                    if (_typeActions.TryGetValue(f.Field.GetType().BaseType, out actObj))
-                        actObj(f.Field);
+                    act();
+                    continue;
                 }
-            });
+                Action<object> actObj;
+                if (_typeActions.TryGetValue(f.Field.GetType().BaseType, out actObj))
+                    actObj(f.Field);
+            }
         }
 
         /// <summary>
-        /// A dictionary is needed, but missing. The dict is loaded on another thread, while this thread
-        /// waits. After waiting, current transaction is rolled back, to be able to read the new dictionary.
+        /// A dictionary is needed, but missing.
         /// </summary>
         internal static void DictionaryFault<TKey, T>(Shielded<ShieldedDict<TKey, T>> dict) where T : class, IEntity<TKey>, new()
         {
-            if (dict.Value != null)
-                throw new InvalidOperationException();
-            _deamon.LoadDict<T, TKey>(dict);
+            Shield.SideEffect(null, () => {
+                bool win = false;
+                using (var cont = Shield.RunToCommit(10000, () => {
+                    win = false;
+                    if (dict.Value != null)
+                        return;
+                    win = true;
+                    dict.Value = null; // force write, we need to lock it
+                }))
+                {
+                    if (!win)
+                        return;
+                    var d = _conn.LoadDict<T, TKey>();
+                    cont.InContext(_ => dict.Value = d);
+                    cont.Commit();
+                }
+                RegisterDictionary(dict.Value);
+            });
             Shield.Rollback();
         }
 
-        internal static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
+        static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
-            if (!_typeActions.TryAdd(typeof(T), o => {
+            if (!_typeActions.TryAdd(typeof(T), o => 
+                {
                     var entity = (T)o;
-                    if (entity.Saved && dict.ContainsKey(entity.Id))
-                        _deamon.Update(entity);
+                    if (!dict.Changes.Contains(entity.Id) &&
+                        entity.Saved && dict.ContainsKey(entity.Id))
+                        _conn.Update(entity);
                 }))
             {
-                throw new InvalidOperationException("This type already has a registered dictionary.");
+                return;
             }
             _refActions[dict] = () => Process(dict);
         }
@@ -81,20 +99,20 @@ namespace ShieldedDb.Data
             {
                 T entity;
                 if (!dict.TryGetValue(key, out entity))
-                    _deamon.Delete<T, TKey>(key);
+                    _conn.Delete<T, TKey>(key);
                 else if (!entity.Saved)
-                    _deamon.Insert(entity);
+                    _conn.Insert(entity);
             }
         }
 
-        public static void StartDeamon(string connectionString)
+        public static void OpenConnection(string connectionString)
         {
-            _deamon = new DataDeamon(connectionString);
+            _conn = new Connection(connectionString);
         }
 
-        public static void StopDeamon()
+        public static void CloseConnection()
         {
-            _deamon.Dispose();
+            _conn.Dispose();
         }
 
         [ThreadStatic]

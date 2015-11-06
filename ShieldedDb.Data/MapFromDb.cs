@@ -6,9 +6,6 @@ namespace ShieldedDb.Data
 {
     internal static class MapFromDb
     {
-        /// <summary>
-        /// Must run in a QuietTransaction, otherwise will trigger UPDATE commands.
-        /// </summary>
         public static T Map<T>(T source) where T : class, new()
         {
             var testSource = source as Test;

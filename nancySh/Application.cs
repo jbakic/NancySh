@@ -12,14 +12,6 @@ namespace nancySh
             Csrf.Enable(pipelines);
             base.ApplicationStartup(container, pipelines);
         }
-
-        protected override void ConfigureConventions(Nancy.Conventions.NancyConventions nancyConventions)
-        {
-            base.ConfigureConventions(nancyConventions);
-
-            nancyConventions.StaticContentsConventions.Add(
-                StaticContentConventionBuilder.AddDirectory("/js"));
-        }
     }
 }
 

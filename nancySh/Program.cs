@@ -10,13 +10,13 @@ namespace nancySh
     {
         public static void Main(string[] args)
         {
-            Console.WriteLine("Hello World @ 127.0.0.1:8080 / Press Enter to quit...");
+            Console.WriteLine("Hello World @ port 8080 / Press Enter to quit...");
 
             StaticConfiguration.DisableErrorTraces = false;
             try
             {
-                Database.StartDeamon(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
-                using (var host = new NancyHost(new Uri("http://127.0.0.1:8080/"), new Application()))
+                Database.OpenConnection(ConfigurationManager.AppSettings["DatabaseConnectionString"]);
+                using (var host = new NancyHost(new Uri("http://localhost:8080/"), new Application()))
                 {
                     host.Start();
                     Console.ReadLine();
@@ -24,7 +24,7 @@ namespace nancySh
             }
             finally
             {
-                Database.StopDeamon();
+                Database.CloseConnection();
             }
         }
     }
