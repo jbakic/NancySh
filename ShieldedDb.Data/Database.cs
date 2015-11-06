@@ -16,8 +16,10 @@ namespace ShieldedDb.Data
 {
     public static class Database
     {
-        static readonly ConcurrentDictionary<Type, Action<object>> _saveActions =
+        static readonly ConcurrentDictionary<Type, Action<object>> _typeActions =
             new ConcurrentDictionary<Type, Action<object>>();
+        static readonly ConcurrentDictionary<object, Action> _refActions =
+            new ConcurrentDictionary<object, Action>();
 
         static Sql _sql;
 
@@ -38,14 +40,16 @@ namespace ShieldedDb.Data
             {
                 if (!f.HasChanges) continue;
 
-                var fieldType = f.Field.GetType();
-                var isDict = fieldType.IsGenericType &&
-                    fieldType.GetGenericTypeDefinition() == typeof(ShieldedDict<,>);
-                var type = isDict ? fieldType.GetGenericArguments()[1] : fieldType.BaseType;
+                Action refAct;
+                if (_refActions.TryGetValue(f.Field, out refAct))
+                {
+                    refAct();
+                    continue;
+                }
 
-                Action<object> actObj;
-                if (_saveActions.TryGetValue(type, out actObj))
-                    actObj(isDict ? null : f.Field);
+                Action<object> objAct;
+                if (_typeActions.TryGetValue(f.GetType().BaseType, out objAct))
+                    objAct(f.Field);
             }
         }
 
@@ -75,23 +79,23 @@ namespace ShieldedDb.Data
 
         static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
-            _saveActions.TryAdd(typeof(T), o => {
-                if (o == null)
-                {
-                    foreach (var key in dict.Changes)
-                    {
-                        T entity;
-                        if (!dict.TryGetValue(key, out entity))
-                            _sql.Delete<T, TKey>(key);
-                        else if (!entity.Saved)
-                            _sql.Insert(entity);
-                    }
-                }
-                else
+            if (!_typeActions.TryAdd(typeof(T), o =>
                 {
                     var entity = (T)o;
                     if (!dict.Changes.Contains(entity.Id) && entity.Saved && dict.ContainsKey(entity.Id))
                         _sql.Update(entity);
+                }))
+            {
+                throw new InvalidOperationException("Type already registered.");
+            }
+            _refActions.TryAdd(dict, () => {
+                foreach (var key in dict.Changes)
+                {
+                    T entity;
+                    if (!dict.TryGetValue(key, out entity))
+                        _sql.Delete<T, TKey>(key);
+                    else if (!entity.Saved)
+                        _sql.Insert(entity);
                 }
             });
         }

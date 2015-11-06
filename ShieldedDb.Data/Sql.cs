@@ -25,7 +25,7 @@ namespace ShieldedDb.Data
         public ShieldedDict<TKey, T> LoadDict<T, TKey>() where T : class, IEntity<TKey>, new()
         {
             var name = typeof(T).Name;
-            Debug.WriteLine("Loading dict {0}", name);
+            Debug.WriteLine("Loading dict {0}", (object)name);
             using (var conn = new NpgsqlConnection(_connString))
             {
                 // this transaction cannot conflict, it's just creating new objects.
