@@ -96,9 +96,6 @@ namespace ShieldedDb.Data
             });
         }
 
-        static void Process<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
-        {
-        }
 
         public static void SetConnectionString(string connectionString)
         {
