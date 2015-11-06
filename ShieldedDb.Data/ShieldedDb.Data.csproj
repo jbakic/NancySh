@@ -48,7 +48,7 @@
     <Compile Include="Context.cs" />
     <Compile Include="ContextExt.cs" />
     <Compile Include="MapFromDb.cs" />
-    <Compile Include="Connection.cs" />
+    <Compile Include="Sql.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

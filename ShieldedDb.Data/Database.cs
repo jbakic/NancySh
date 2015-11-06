@@ -16,12 +16,10 @@ namespace ShieldedDb.Data
 {
     public static class Database
     {
-        static readonly ConcurrentDictionary<object, Action> _refActions =
-            new ConcurrentDictionary<object, Action>();
-        static readonly ConcurrentDictionary<Type, Action<object>> _typeActions =
+        static readonly ConcurrentDictionary<Type, Action<object>> _saveActions =
             new ConcurrentDictionary<Type, Action<object>>();
 
-        static Connection _conn;
+        static Sql _sql;
 
         static Database()
         {
@@ -40,79 +38,71 @@ namespace ShieldedDb.Data
             {
                 if (!f.HasChanges) continue;
 
-                Action act;
-                if (_refActions.TryGetValue(f.Field, out act))
-                {
-                    act();
-                    continue;
-                }
+                var fieldType = f.Field.GetType();
+                var isDict = fieldType.IsGenericType &&
+                    fieldType.GetGenericTypeDefinition() == typeof(ShieldedDict<,>);
+                var type = isDict ? fieldType.GetGenericArguments()[1] : fieldType.BaseType;
+
                 Action<object> actObj;
-                if (_typeActions.TryGetValue(f.Field.GetType().BaseType, out actObj))
-                    actObj(f.Field);
+                if (_saveActions.TryGetValue(type, out actObj))
+                    actObj(isDict ? null : f.Field);
             }
         }
 
         /// <summary>
-        /// A dictionary is needed, but missing.
+        /// A dictionary is needed, but missing. Causes the current transaction to rollback,
+        /// and loads the dictionary before the new repetition starts.
         /// </summary>
         internal static void DictionaryFault<TKey, T>(Shielded<ShieldedDict<TKey, T>> dict) where T : class, IEntity<TKey>, new()
         {
             Shield.SideEffect(null, () => {
-                bool win = false;
-                using (var cont = Shield.RunToCommit(10000, () => {
-                    win = false;
+                // we run a dummy trans just to lock the wrapping Shielded...
+                using (var cont = Shield.RunToCommit(10000, () => dict.Value = dict.Value))
+                {
+                    // ...then check if it's still empty, in which case we do the loading
+                    // conveniently, although it's locked, we can still read the dict wrapper out of transaction..
                     if (dict.Value != null)
                         return;
-                    win = true;
-                    dict.Value = null; // force write, we need to lock it
-                }))
-                {
-                    if (!win)
-                        return;
-                    var d = _conn.LoadDict<T, TKey>();
+                    // loading runs a transaction while loading, so it may not run in-context.
+                    var d = _sql.LoadDict<T, TKey>();
                     cont.InContext(_ => dict.Value = d);
+                    RegisterDictionary(d);
                     cont.Commit();
                 }
-                RegisterDictionary(dict.Value);
             });
             Shield.Rollback();
         }
 
         static void RegisterDictionary<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
-            if (!_typeActions.TryAdd(typeof(T), o => 
+            _saveActions.TryAdd(typeof(T), o => {
+                if (o == null)
+                {
+                    foreach (var key in dict.Changes)
+                    {
+                        T entity;
+                        if (!dict.TryGetValue(key, out entity))
+                            _sql.Delete<T, TKey>(key);
+                        else if (!entity.Saved)
+                            _sql.Insert(entity);
+                    }
+                }
+                else
                 {
                     var entity = (T)o;
-                    if (!dict.Changes.Contains(entity.Id) &&
-                        entity.Saved && dict.ContainsKey(entity.Id))
-                        _conn.Update(entity);
-                }))
-            {
-                return;
-            }
-            _refActions[dict] = () => Process(dict);
+                    if (!dict.Changes.Contains(entity.Id) && entity.Saved && dict.ContainsKey(entity.Id))
+                        _sql.Update(entity);
+                }
+            });
         }
 
         static void Process<TKey, T>(ShieldedDict<TKey, T> dict) where T : IEntity<TKey>, new()
         {
-            foreach (var key in dict.Changes)
-            {
-                T entity;
-                if (!dict.TryGetValue(key, out entity))
-                    _conn.Delete<T, TKey>(key);
-                else if (!entity.Saved)
-                    _conn.Insert(entity);
-            }
         }
 
-        public static void OpenConnection(string connectionString)
+        public static void SetConnectionString(string connectionString)
         {
-            _conn = new Connection(connectionString);
-        }
-
-        public static void CloseConnection()
-        {
-            _conn.Dispose();
+            _sql = new Sql(connectionString);
         }
 
         [ThreadStatic]

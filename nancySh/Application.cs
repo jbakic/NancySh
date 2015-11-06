@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Nancy;
 using Nancy.Security;
 using Nancy.Conventions;
@@ -11,6 +11,14 @@ namespace nancySh
         {
             Csrf.Enable(pipelines);
             base.ApplicationStartup(container, pipelines);
+        }
+
+        protected override void ConfigureConventions(Nancy.Conventions.NancyConventions nancyConventions)
+        {
+            base.ConfigureConventions(nancyConventions);
+
+            nancyConventions.StaticContentsConventions.Add(
+                StaticContentConventionBuilder.AddDirectory("/js"));
         }
     }
 }

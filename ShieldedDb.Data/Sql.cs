@@ -13,36 +13,25 @@ using System.Collections.Generic;
 
 namespace ShieldedDb.Data
 {
-    public class Connection : IDisposable
+    public class Sql
     {
-        NpgsqlConnection _conn;
+        readonly string _connString;
 
-        internal Connection(string connectionString)
+        internal Sql(string connectionString)
         {
-            _conn = new NpgsqlConnection(connectionString);
-            _conn.Open();
+            _connString = connectionString;
         }
 
-        public void Dispose()
-        {
-            _conn.Dispose();
-        }
-
-        /// <summary>
-        /// The deamon does the loading on his own thread, to avoid triggering
-        /// UPDATE commands for the entities. If this is called from a transaction,
-        /// that transaction should rollback to be able to read the dictionary.
-        /// </summary>
         public ShieldedDict<TKey, T> LoadDict<T, TKey>() where T : class, IEntity<TKey>, new()
         {
             var name = typeof(T).Name;
             Debug.WriteLine("Loading dict {0}", name);
-            lock (_conn)
+            using (var conn = new NpgsqlConnection(_connString))
             {
                 // this transaction cannot conflict, it's just creating new objects.
                 return Shield.InTransaction(() =>
                     new ShieldedDict<TKey, T>(
-                        _conn.Query<T>(string.Format("select * from {0}", name))
+                        conn.Query<T>(string.Format("select * from {0}", name))
                         .Select(t => new KeyValuePair<TKey, T>(t.Id, MapFromDb.Map(t)))));
             }
         }
@@ -50,23 +39,23 @@ namespace ShieldedDb.Data
         public void Insert<T>(T entity) where T : IEntity
         {
             Debug.WriteLine("Inserting entity {0}", entity);
-            lock (_conn)
-                _conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
+            using (var conn = new NpgsqlConnection(_connString))
+                conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
             entity.Saved = true;
         }
 
         public void Update<T>(T entity) where T : IEntity
         {
             Debug.WriteLine("Updating entity {0}", entity);
-            lock (_conn)
-                _conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity);
+            using (var conn = new NpgsqlConnection(_connString))
+                conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity);
         }
 
         public void Delete<T, TKey>(TKey id) where T : IEntity<TKey>
         {
             Debug.WriteLine("Deleting entity {0}[{1}]", typeof(T).Name, id);
-            lock (_conn)
-                _conn.Execute(string.Format("delete from {0} where Id = @id", typeof(T).Name),
+            using (var conn = new NpgsqlConnection(_connString))
+                conn.Execute(string.Format("delete from {0} where Id = @id", typeof(T).Name),
                     new { id });
         }
 
