@@ -39,7 +39,7 @@
       <HintPath>..\packages\Npgsql.3.0.3\lib\net45\Npgsql.dll</HintPath>
     </Reference>
     <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.4.0.3\lib\net40\Shielded.dll</HintPath>
+      <HintPath>..\packages\Shielded.4.1.0\lib\net40\Shielded.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
