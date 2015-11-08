@@ -48,7 +48,7 @@ namespace ShieldedDb.Data
                 }
 
                 Action<object> objAct;
-                if (_typeActions.TryGetValue(f.GetType().BaseType, out objAct))
+                if (_typeActions.TryGetValue(f.Field.GetType().BaseType, out objAct))
                     objAct(f.Field);
             }
         }
