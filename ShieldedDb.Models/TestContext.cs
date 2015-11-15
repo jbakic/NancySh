@@ -1,21 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Threading;
-using Dapper;
-using Npgsql;
 using Shielded;
 using Shielded.ProxyGen;
-using ShieldedDb.Models;
 using System.Configuration;
 
-namespace ShieldedDb.Data
+using ShieldedDb.Data;
+using System.Reflection;
+
+namespace ShieldedDb.Models
 {
-    public class Context
+    public class TestContext : IContext
     {
-        internal Context()
+        static TestContext()
         {
+            var entityType = typeof(IEntity<>);
+            Factory.PrepareTypes(Assembly.GetExecutingAssembly()
+                .GetTypes().Where(t => t.IsClass && t.GetInterface(entityType.Name) != null).ToArray());
         }
 
         public IDictionary<int, Test> Tests
@@ -23,7 +25,7 @@ namespace ShieldedDb.Data
             get
             {
                 if (_tests.Value == null)
-                    Database.DictionaryFault(_tests);
+                    Database.LoadAll(_tests);
                 return _tests.Value;
             }
         }

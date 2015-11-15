@@ -1,4 +1,5 @@
 ﻿using System;
+using ShieldedDb.Data;
 
 namespace ShieldedDb.Models
 {
@@ -6,11 +7,11 @@ namespace ShieldedDb.Models
     {
         public virtual int Id { get; set; }
         public virtual string Val { get; set; }
-        public virtual bool Saved { get; set; }
+        public virtual bool Inserted { get; set; }
 
         public override string ToString()
         {
-            return string.Format("[Test: Id={0}, Val={1}, Saved={2}]", Id, Val, Saved);
+            return string.Format("[Test: Id={0}, Val={1}, Inserted={2}]", Id, Val, Inserted);
         }
     }
 }

@@ -35,29 +35,21 @@
     <Reference Include="Dapper">
       <HintPath>..\packages\Dapper.1.42\lib\net45\Dapper.dll</HintPath>
     </Reference>
-    <Reference Include="Npgsql">
-      <HintPath>..\packages\Npgsql.3.0.3\lib\net45\Npgsql.dll</HintPath>
-    </Reference>
     <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.4.1.0\lib\net40\Shielded.dll</HintPath>
+      <HintPath>..\packages\Shielded.4.1.1\lib\net40\Shielded.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Database.cs" />
-    <Compile Include="Context.cs" />
     <Compile Include="ContextExt.cs" />
     <Compile Include="MapFromDb.cs" />
     <Compile Include="Sql.cs" />
+    <Compile Include="IEntity.cs" />
+    <Compile Include="IContext.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ShieldedDb.Models\ShieldedDb.Models.csproj">
-      <Project>{C42216D4-BFF9-4B5A-8CA2-B021E560A243}</Project>
-      <Name>ShieldedDb.Models</Name>
-    </ProjectReference>
   </ItemGroup>
 </Project>

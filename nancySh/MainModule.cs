@@ -16,7 +16,7 @@ namespace nancySh
 
             Post["/delete/{Id:int}"] = parameters => {
                 this.ValidateCsrfToken();
-                Database.Execute(ctx => {
+                Database.Execute((TestContext ctx) => {
                     ctx.Tests.Remove(parameters.Id);
                 });
                 return Response.AsRedirect("/");
@@ -25,7 +25,7 @@ namespace nancySh
             Post["/update"] = parameters => {
                 this.ValidateCsrfToken();
                 var data = this.Bind<Test>();
-                Database.Execute(ctx => {
+                Database.Execute((TestContext ctx) => {
                     var shT = ctx.Tests[data.Id];
                     shT.Val = data.Val;
                 });
@@ -34,7 +34,7 @@ namespace nancySh
 
             Post["/new"] = _ => {
                 this.ValidateCsrfToken();
-                Database.Execute(ctx => {
+                Database.Execute((TestContext ctx) => {
                     var t = ctx.Tests.New(new Random().Next(1000));
                     t.Val = "Test " + t.Id;
                 });
@@ -45,7 +45,7 @@ namespace nancySh
         private object IndexView()
         {
             this.CreateNewCsrfToken();
-            return View["index", Database.Execute(ctx => ctx.Tests.Values.OrderBy(t => t.Id).ToArray())];
+            return View["index", Database.Execute((TestContext ctx) => ctx.Tests.Values.OrderBy(t => t.Id).ToArray())];
         }
     }
 }

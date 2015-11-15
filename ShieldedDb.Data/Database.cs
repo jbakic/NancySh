@@ -1,55 +1,50 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data;
 using System.Linq;
 using System.Reflection;
-using Dapper;
 using Shielded;
 using Shielded.ProxyGen;
-using Npgsql;
-using ShieldedDb.Models;
-using System.Threading;
 
 namespace ShieldedDb.Data
 {
     public static class Database
     {
-        static readonly ConcurrentDictionary<Type, Action<object>> _typeActions =
-            new ConcurrentDictionary<Type, Action<object>>();
-        static readonly ConcurrentDictionary<object, Action> _refActions =
-            new ConcurrentDictionary<object, Action>();
+        static readonly ConcurrentDictionary<Type, Func<object, SqlOp>> _typeActions =
+            new ConcurrentDictionary<Type, Func<object, SqlOp>>();
+        static readonly ConcurrentDictionary<object, Func<SqlOp>> _refActions =
+            new ConcurrentDictionary<object, Func<SqlOp>>();
 
         static Sql _sql;
 
         static Database()
         {
-            var entityType = typeof(IEntity);
-            Factory.PrepareTypes(Assembly.GetAssembly(entityType)
-                .GetTypes().Where(t => t.IsClass && t.GetInterface(entityType.Name) != null).ToArray());
-
             Shield.WhenCommitting(OnCommitting);
         }
 
         static void OnCommitting(IEnumerable<TransactionField> tf)
         {
-            if (_ctx == null)
-                return;
+            if (_ctx != null)
+                _sql.Run(GetOps(tf));
+        }
+
+        static IEnumerable<SqlOp> GetOps(IEnumerable<TransactionField> tf)
+        {
             foreach (var f in tf)
             {
                 if (!f.HasChanges) continue;
 
-                Action refAct;
+                Func<SqlOp> refAct;
                 if (_refActions.TryGetValue(f.Field, out refAct))
                 {
-                    refAct();
+                    yield return refAct();
                     continue;
                 }
 
-                Action<object> objAct;
+                Func<object, SqlOp> objAct;
                 if (_typeActions.TryGetValue(f.Field.GetType().BaseType, out objAct))
-                    objAct(f.Field);
+                    yield return objAct(f.Field);
             }
         }
 
@@ -57,7 +52,7 @@ namespace ShieldedDb.Data
         /// A dictionary is needed, but missing. Causes the current transaction to rollback,
         /// and loads the dictionary before the new repetition starts.
         /// </summary>
-        internal static void DictionaryFault<TKey, T>(Shielded<ShieldedDict<TKey, T>> dict) where T : class, IEntity<TKey>, new()
+        public static void LoadAll<TKey, T>(Shielded<ShieldedDict<TKey, T>> dict) where T : class, IEntity<TKey>, new()
         {
             Shield.SideEffect(null, () => {
                 // we run a dummy trans just to lock the wrapping Shielded...
@@ -82,45 +77,49 @@ namespace ShieldedDb.Data
             if (!_typeActions.TryAdd(typeof(T), o =>
                 {
                     var entity = (T)o;
-                    if (!dict.Changes.Contains(entity.Id) && entity.Saved && dict.ContainsKey(entity.Id))
-                        _sql.Update(entity);
+                    if (!dict.Changes.Contains(entity.Id) && entity.Inserted && dict.ContainsKey(entity.Id))
+                        return _sql.Update(entity);
+                    return Sql.Nop;
                 }))
             {
                 throw new InvalidOperationException("Type already registered.");
             }
-            _refActions.TryAdd(dict, () => {
-                foreach (var key in dict.Changes)
-                {
+            _refActions.TryAdd(dict, () => Sql.Do(
+                dict.Changes.Select(key => {
                     T entity;
                     if (!dict.TryGetValue(key, out entity))
-                        _sql.Delete<T, TKey>(key);
-                    else if (!entity.Saved)
-                        _sql.Insert(entity);
-                }
-            });
+                        return _sql.Delete<T, TKey>(key);
+                    else if (!entity.Inserted)
+                        return _sql.Insert(entity);
+                    return Sql.Nop;
+                })));
         }
 
 
-        public static void SetConnectionString(string connectionString)
+        public static Func<IDbConnection> ConnectionFactory
         {
-            _sql = new Sql(connectionString);
+            set
+            {
+                _sql = new Sql(value);
+            }
         }
 
         [ThreadStatic]
-        static Context _ctx;
+        static IContext _ctx;
 
-        public static void Execute(Action<Context> act)
+        public static void Execute<Ctx>(Action<Ctx> act) where Ctx : IContext, new()
         {
             if (_ctx != null)
             {
-                act(_ctx);
+                act((Ctx)_ctx);
                 return;
             }
 
             try
             {
-                _ctx = new Context();
-                Shield.InTransaction(() => act(_ctx));
+                var ctx = new Ctx();
+                _ctx = ctx;
+                Shield.InTransaction(() => act(ctx));
             }
             finally
             {
@@ -128,10 +127,10 @@ namespace ShieldedDb.Data
             }
         }
 
-        public static T Execute<T>(Func<Context, T> f)
+        public static T Execute<Ctx, T>(Func<Ctx, T> f) where Ctx : IContext, new()
         {
             T res = default(T);
-            Execute(ctx => {
+            Execute<Ctx>(ctx => {
                 res = f(ctx);
             });
             return res;

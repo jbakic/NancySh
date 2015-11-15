@@ -29,11 +29,23 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="Shielded">
+      <HintPath>..\packages\Shielded.4.1.1\lib\net40\Shielded.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Test.cs" />
-    <Compile Include="IEntity.cs" />
+    <Compile Include="TestContext.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <ProjectReference Include="..\ShieldedDb.Data\ShieldedDb.Data.csproj">
+      <Project>{A893D391-2123-44FE-8862-F4563A0C3930}</Project>
+      <Name>ShieldedDb.Data</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>

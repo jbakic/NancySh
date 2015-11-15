@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using Shielded;
 using Shielded.ProxyGen;
-using ShieldedDb.Models;
 
 namespace ShieldedDb.Data
 {

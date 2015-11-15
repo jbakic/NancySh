@@ -1,10 +1,10 @@
 ﻿using System;
 
-namespace ShieldedDb.Models
+namespace ShieldedDb.Data
 {
     public interface IEntity
     {
-        bool Saved { get; set; }
+        bool Inserted { get; set; }
     }
 
     public interface IEntity<TKey> : IEntity
