@@ -13,13 +13,6 @@ namespace ShieldedDb.Models
 {
     public class TestContext : IContext
     {
-        static TestContext()
-        {
-            var entityType = typeof(IEntity<>);
-            Factory.PrepareTypes(Assembly.GetExecutingAssembly()
-                .GetTypes().Where(t => t.IsClass && t.GetInterface(entityType.Name) != null).ToArray());
-        }
-
         public IDictionary<int, Test> Tests
         {
             get

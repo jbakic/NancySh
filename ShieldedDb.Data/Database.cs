@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using Shielded;
 using Shielded.ProxyGen;
+using System.Diagnostics;
 
 namespace ShieldedDb.Data
 {
@@ -20,13 +21,28 @@ namespace ShieldedDb.Data
 
         static Database()
         {
+            var iEntity = typeof(IEntity);
+            var types = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(asm => asm.GetTypes()
+                    .Where(t => t.IsClass && t.GetInterface(iEntity.Name) != null))
+                .ToArray();
+            Debug.WriteLine("Preparing {0} types.", types.Length);
+            Factory.PrepareTypes(types);
+
             Shield.WhenCommitting(OnCommitting);
         }
 
         static void OnCommitting(IEnumerable<TransactionField> tf)
         {
-            if (_ctx != null)
-                _sql.Run(GetOps(tf));
+            try
+            {
+                if (_ctx != null)
+                    _sql.Run(GetOps(tf));
+            }
+            catch
+            {
+                Console.Error.WriteLine("DB fail.");
+            }
         }
 
         static IEnumerable<SqlOp> GetOps(IEnumerable<TransactionField> tf)
