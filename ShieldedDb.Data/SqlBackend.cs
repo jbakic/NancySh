@@ -13,16 +13,14 @@ namespace ShieldedDb.Data
 {
     internal delegate void SqlOp(IDbConnection conn);
 
-    internal class Sql
+    public class SqlBackend : IBackend
     {
         readonly Func<IDbConnection> _connFactory;
 
-        public Sql(Func<IDbConnection> connFactory)
+        public SqlBackend(Func<IDbConnection> connFactory)
         {
             _connFactory = connFactory;
         }
-
-        public static readonly SqlOp Nop = conn => {};
 
         public Task<bool> Run(IEnumerable<DataOp> p)
         {
@@ -56,14 +54,6 @@ namespace ShieldedDb.Data
             }
         }
 
-        public static SqlOp Do(IEnumerable<SqlOp> ops)
-        {
-            return conn => {
-                foreach (var op in ops)
-                    op(conn);
-            };
-        }
-
         public T[] LoadAll<T>() where T : class, IDistributed, new()
         {
             var name = typeof(T).Name;
@@ -72,7 +62,7 @@ namespace ShieldedDb.Data
                 return conn.Query<T>(string.Format("select * from {0}", name)).ToArray();
         }
 
-        public SqlOp Insert(IDistributed entity)
+        private SqlOp Insert(IDistributed entity)
         {
             return conn => {
                 Debug.WriteLine("Inserting entity {0}", entity);
@@ -80,7 +70,7 @@ namespace ShieldedDb.Data
             };
         }
 
-        public SqlOp Update(IDistributed entity)
+        private SqlOp Update(IDistributed entity)
         {
             return conn => {
                 Debug.WriteLine("Updating entity {0}", entity);
@@ -88,7 +78,7 @@ namespace ShieldedDb.Data
             };
         }
 
-        public SqlOp Delete(IDistributed entity)
+        private SqlOp Delete(IDistributed entity)
         {
             var type = entity.GetType();
             return conn => {

@@ -41,11 +41,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Sql.cs" />
     <Compile Include="Repository.cs" />
     <Compile Include="DataOp.cs" />
     <Compile Include="Map.cs" />
     <Compile Include="IDistributed.cs" />
+    <Compile Include="IBackend.cs" />
+    <Compile Include="SqlBackend.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

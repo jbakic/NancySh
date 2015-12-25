@@ -4,6 +4,9 @@ namespace ShieldedDb.Data
 {
     public interface IDistributed
     {
+        /// <summary>
+        /// May never be null.
+        /// </summary>
         object IdValue { get; }
     }
 

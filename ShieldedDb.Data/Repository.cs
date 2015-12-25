@@ -8,6 +8,7 @@ using Shielded;
 using Shielded.ProxyGen;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace ShieldedDb.Data
 {
@@ -61,29 +62,38 @@ namespace ShieldedDb.Data
             });
         }
 
-        static Sql _sql;
-
         static void DetectUpdates(CommitContinuation continuation)
         {
             continuation.InContext(tfs =>
                 _ctx.ToDo.AddRange(
-                    tfs.Where(field =>
-                        field.HasChanges && field.Field is IDistributed && _ctx.ToDo.All(op => op.Entity != field.Field))
-                    .Select(field => DataOp.Update((IDistributed)field.Field))));
+                    tfs.Where(field => field.HasChanges)
+                    .Select(field => field.Field)
+                    .OfType<IDistributed>()
+                    .Where(d =>
+                        !_ctx.ToDo.Any(op => op.Entity.IdValue.Equals(d.IdValue)))
+                    .Select(d => DataOp.Update(d))));
         }
 
         static Task<bool> RunDistro()
         {
-            return _sql.Run(_ctx.ToDo);
+            return Task.WhenAll(_backs.Select(b => b.Run(_ctx.ToDo)))
+                .ContinueWith(boolsTask => boolsTask.Result.All(b => b));
         }
 
-        public static Func<IDbConnection> ConnectionFactory
+        static IBackend[] _backs = new IBackend[0];
+
+        /// <summary>
+        /// Currently, only the first back-end is used for loading.
+        /// </summary>
+        public static void AddBackend(IBackend exec)
         {
-            set
+            IBackend[] oldEx = _backs, newEx;
+            do
             {
-                _sql = new Sql(value);
-            }
+                newEx = oldEx.Concat(new[] { exec }).ToArray();
+            } while (Interlocked.CompareExchange(ref _backs, newEx, oldEx) != oldEx);
         }
+
 
         [ThreadStatic]
         static TransactionMeta _ctx;
@@ -144,7 +154,7 @@ namespace ShieldedDb.Data
                     // we fake one, because Map needs it.
                     dict = InFakeTransaction(() =>
                         new ShieldedDict<TKey, T>(
-                            _sql.LoadAll<T>()
+                            _backs[0].LoadAll<T>()
                             .Select(t => new KeyValuePair<TKey, T>(t.Id, Map.ToShielded(t)))));
                     cont.InContext(_ => _dictCache[type] = dict);
                     cont.Commit();
