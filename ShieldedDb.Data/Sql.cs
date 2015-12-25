@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using Dapper;
 using Shielded;
+using System.Threading.Tasks;
 
 namespace ShieldedDb.Data
 {
@@ -23,17 +24,35 @@ namespace ShieldedDb.Data
 
         public static readonly SqlOp Nop = conn => {};
 
-        public void Run(IEnumerable<SqlOp> p)
+        public Task<bool> Run(IEnumerable<DataOp> p)
         {
-            using (var conn = _connFactory())
-            {
-                conn.Open();
-                using (var tran = conn.BeginTransaction(IsolationLevel.ReadCommitted))
+            return Task.Run(() => {
+                using (var conn = _connFactory())
                 {
-                    foreach (var op in p)
-                        op(conn);
-                    tran.Commit();
+                    conn.Open();
+                    using (var tran = conn.BeginTransaction(IsolationLevel.ReadCommitted))
+                    {
+                        foreach (var op in p.Select(Convert))
+                            op(conn);
+                        tran.Commit();
+                        return true;
+                    }
                 }
+            });
+        }
+
+        private SqlOp Convert(DataOp op)
+        {
+            switch (op.OpType)
+            {
+            case DataOpType.Insert:
+                return Insert(op.Entity);
+            case DataOpType.Update:
+                return Update(op.Entity);
+            case DataOpType.Delete:
+                return Delete(op.Entity);
+            default:
+                throw new NotSupportedException();
             }
         }
 
@@ -45,41 +64,37 @@ namespace ShieldedDb.Data
             };
         }
 
-        public ShieldedDict<TKey, T> LoadDict<T, TKey>() where T : class, IEntity<TKey>, new()
+        public T[] LoadAll<T>() where T : class, IDistributed, new()
         {
             var name = typeof(T).Name;
-            Debug.WriteLine("Loading dict {0}", (object)name);
+            Debug.WriteLine("Loading all {0}", (object)name);
             using (var conn = _connFactory())
-                // this transaction cannot conflict, it's just creating new objects.
-                return Shield.InTransaction(() =>
-                    new ShieldedDict<TKey, T>(
-                        conn.Query<T>(string.Format("select * from {0}", name))
-                        .Select(t => new KeyValuePair<TKey, T>(t.Id, MapFromDb.Map(t)))));
+                return conn.Query<T>(string.Format("select * from {0}", name)).ToArray();
         }
 
-        public SqlOp Insert<T>(T entity) where T : IEntity
+        public SqlOp Insert(IDistributed entity)
         {
             return conn => {
                 Debug.WriteLine("Inserting entity {0}", entity);
-                conn.Execute(_insertSqls.GetOrAdd(typeof(T), GetInsertSql), entity);
-                entity.Inserted = true;
+                conn.Execute(_insertSqls.GetOrAdd(entity.GetType(), GetInsertSql), entity);
             };
         }
 
-        public SqlOp Update<T>(T entity) where T : IEntity
+        public SqlOp Update(IDistributed entity)
         {
             return conn => {
                 Debug.WriteLine("Updating entity {0}", entity);
-                conn.Execute(_updateSqls.GetOrAdd(typeof(T), GetUpdateSql), entity);
+                conn.Execute(_updateSqls.GetOrAdd(entity.GetType(), GetUpdateSql), entity);
             };
         }
 
-        public SqlOp Delete<T, TKey>(TKey id) where T : IEntity<TKey>
+        public SqlOp Delete(IDistributed entity)
         {
+            var type = entity.GetType();
             return conn => {
-                Debug.WriteLine("Deleting entity {0}[{1}]", typeof(T).Name, id);
-                conn.Execute(string.Format("delete from {0} where Id = @id", typeof(T).Name),
-                    new { id });
+                Debug.WriteLine("Deleting entity {0}[{1}]", type.Name, entity.IdValue);
+                conn.Execute(string.Format("delete from {0} where Id = @Id", type.Name),
+                    new { Id = entity.IdValue });
             };
         }
 
@@ -87,7 +102,7 @@ namespace ShieldedDb.Data
 
         string GetInsertSql(Type entityType)
         {
-            var props = entityType.GetProperties().Where(pi => pi.Name != "Inserted");
+            var props = entityType.GetProperties();
             StringBuilder sb = new StringBuilder();
             sb.Append("insert into ");
             sb.Append(entityType.Name);
@@ -109,7 +124,7 @@ namespace ShieldedDb.Data
         string GetUpdateSql(Type entityType)
         {
             var props = entityType.GetProperties()
-                .Where(pi => pi.Name != "Id" && pi.Name != "Inserted");
+                .Where(pi => pi.Name != "Id");
             StringBuilder sb = new StringBuilder();
             sb.Append("update ");
             sb.Append(entityType.Name);

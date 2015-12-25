@@ -16,27 +16,25 @@ namespace nancySh
 
             Post["/delete/{Id:int}"] = parameters => {
                 this.ValidateCsrfToken();
-                Database.Execute((TestContext ctx) => {
-                    ctx.Tests.Remove(parameters.Id);
-                });
+                Test.Repo.Remove(new Test { Id = parameters.Id });
                 return Response.AsRedirect("/");
             };
 
             Post["/update"] = parameters => {
                 this.ValidateCsrfToken();
                 var data = this.Bind<Test>();
-                Database.Execute((TestContext ctx) => {
-                    var shT = ctx.Tests[data.Id];
-                    shT.Val = data.Val;
-                });
+                Repository.InTransaction(() =>
+                    // the .Val change results in an automatic DB update as well.
+                    Test.Repo.Find(data.Id).Val = data.Val);
                 return Response.AsRedirect("/");
             };
 
             Post["/new"] = _ => {
                 this.ValidateCsrfToken();
-                Database.Execute((TestContext ctx) => {
-                    var t = ctx.Tests.New(new Random().Next(1000));
-                    t.Val = "Test " + t.Id;
+                var id = new Random().Next(1000);
+                Test.Repo.Insert(new Test {
+                    Id = id,
+                    Val = "Test " + id,
                 });
                 return Response.AsRedirect("/");
             };
@@ -45,7 +43,7 @@ namespace nancySh
         private object IndexView()
         {
             this.CreateNewCsrfToken();
-            return View["index", Database.Execute((TestContext ctx) => ctx.Tests.Values.OrderBy(t => t.Id).ToArray())];
+            return View["index", Repository.GetAll<int, Test>().OrderBy(t => t.Id).ToArray()];
         }
     }
 }
