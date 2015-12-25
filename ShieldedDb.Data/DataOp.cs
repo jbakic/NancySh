@@ -17,17 +17,17 @@ namespace ShieldedDb.Data
 
         public static DataOp Insert(IDistributed entity)
         {
-            return new DataOp { OpType = DataOpType.Insert, Entity = Map.NonShieldedClone(entity) };
+            return new DataOp { OpType = DataOpType.Insert, Entity = entity };
         }
 
         public static DataOp Update(IDistributed entity)
         {
-            return new DataOp { OpType = DataOpType.Update, Entity = Map.NonShieldedClone(entity) };
+            return new DataOp { OpType = DataOpType.Update, Entity = entity };
         }
 
         public static DataOp Delete(IDistributed entity)
         {
-            return new DataOp { OpType = DataOpType.Delete, Entity = Map.NonShieldedClone(entity) };
+            return new DataOp { OpType = DataOpType.Delete, Entity = entity };
         }
     }
 }

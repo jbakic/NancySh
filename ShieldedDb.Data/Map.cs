@@ -16,18 +16,23 @@ namespace ShieldedDb.Data
             new ConcurrentDictionary<Type, PropertyInfo[]>();
 
         /// <summary>
-        /// If shielded, returns the same object.
+        /// If shielded, returns the same object. If not, makes a shielded clone
+        /// based on the object's actual type, not based on the generic type argument.
         /// </summary>
-        public static T ToShielded<T>(T source) where T : class, IDistributed, new()
+        public static T ToShielded<T>(T source) where T : IDistributed
         {
             var type = source.GetType();
             if (Factory.IsProxy(type))
                 return source;
-            var res = Factory.NewShielded<T>();
-            Copy(typeof(T), source, res);
-            return res;
+            var res = Activator.CreateInstance(Factory.ShieldedType(type));
+            Copy(type, source, res);
+            return (T)res;
         }
 
+        /// <summary>
+        /// Always produces a new object, based on the input object's actual
+        /// type (or, base type, if the object is a proxy).
+        /// </summary>
         public static T NonShieldedClone<T>(T source) where T : IDistributed
         {
             var entityType = source.GetType();

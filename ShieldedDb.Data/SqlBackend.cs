@@ -6,7 +6,6 @@ using System.Data;
 using System.Diagnostics;
 using System.Collections.Generic;
 using Dapper;
-using Shielded;
 using System.Threading.Tasks;
 
 namespace ShieldedDb.Data

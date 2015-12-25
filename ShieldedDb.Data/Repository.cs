@@ -22,16 +22,23 @@ namespace ShieldedDb.Data
     public class Accessor<TKey, T> where T : DistributedBase<TKey>, new()
     {
         public IEnumerable<T> GetAll() { return Repository.GetAll<TKey, T>(); }
+
         public T Find(TKey id) { return Repository.Find<TKey, T>(id); }
+
         public void Remove(T entity) { Repository.Remove<TKey, T>(entity); }
-        public void Insert(T entity) { Repository.Insert<TKey, T>(entity); }
+
+        /// <summary>
+        /// Returns the "live", distributed entity, which will be ref-equal to your
+        /// object if it is a proxy already, or a new shielded proxy otherwise.
+        /// </summary>
+        public T Insert(T entity) { return Repository.Insert<TKey, T>(entity); }
     }
 
     public static class Repository
     {
         class TransactionMeta
         {
-            public readonly List<DataOp> ToDo = new List<DataOp>();
+            public readonly Dictionary<IDistributed, DataOp> ToDo = new Dictionary<IDistributed, DataOp>();
         }
 
         static ShieldedDict<Type, object> _dictCache = new ShieldedDict<Type, object>();
@@ -55,28 +62,35 @@ namespace ShieldedDb.Data
                 .ToArray();
             Debug.WriteLine("Preparing {0} types.", types.Length);
             Factory.PrepareTypes(types);
-
-            Shield.WhenCommitting<IDistributed>(_ => {
-                if (_ctx == null)
-                    throw new InvalidOperationException("Distributables can be changed only in repository transactions.");
-            });
         }
 
-        static void DetectUpdates(CommitContinuation continuation)
+        static void DetectUpdates(IEnumerable<TransactionField> tfs)
         {
-            continuation.InContext(tfs =>
-                _ctx.ToDo.AddRange(
-                    tfs.Where(field => field.HasChanges)
-                    .Select(field => field.Field)
-                    .OfType<IDistributed>()
-                    .Where(d =>
-                        !_ctx.ToDo.Any(op => op.Entity.IdValue.Equals(d.IdValue)))
-                    .Select(d => DataOp.Update(d))));
+            foreach (var field in tfs)
+            {
+                if (!field.HasChanges)
+                    continue;
+                var entity = field.Field as IDistributed;
+                if (entity == null || _ctx.ToDo.ContainsKey(entity))
+                    continue;
+                _ctx.ToDo.Add(entity, DataOp.Update(entity));
+            }
         }
 
-        static Task<bool> RunDistro()
+        static DataOp NonShClone(DataOp source)
         {
-            return Task.WhenAll(_backs.Select(b => b.Run(_ctx.ToDo)))
+            return new DataOp {
+                OpType = source.OpType,
+                Entity = Map.NonShieldedClone(source.Entity),
+            };
+        }
+
+        static Task<bool> RunDistro(CommitContinuation cont)
+        {
+            DataOp[] todos = null;
+            cont.InContext(() => todos = _ctx.ToDo.Values.Select(NonShClone).ToArray());
+            return Task.WhenAll(
+                _backs.Select(b => b.Run(todos)))
                 .ContinueWith(boolsTask => boolsTask.Result.All(b => b));
         }
 
@@ -85,13 +99,14 @@ namespace ShieldedDb.Data
         /// <summary>
         /// Currently, only the first back-end is used for loading.
         /// </summary>
-        public static void AddBackend(IBackend exec)
+        public static void AddBackend(IBackend back)
         {
-            IBackend[] oldEx = _backs, newEx;
+            IBackend[] oldBacks, newBacks = _backs;
             do
             {
-                newEx = oldEx.Concat(new[] { exec }).ToArray();
-            } while (Interlocked.CompareExchange(ref _backs, newEx, oldEx) != oldEx);
+                oldBacks = newBacks;
+                newBacks = oldBacks.Concat(new[] { back }).ToArray();
+            } while ((newBacks = Interlocked.CompareExchange(ref _backs, newBacks, oldBacks)) != oldBacks);
         }
 
 
@@ -111,8 +126,8 @@ namespace ShieldedDb.Data
                 _ctx = new TransactionMeta();
                 using (var continuation = Shield.RunToCommit(30000, act))
                 {
-                    DetectUpdates(continuation);
-                    return RunDistro().Result && continuation.TryCommit();
+                    DetectUpdates(continuation.Fields);
+                    return RunDistro(continuation).Result && continuation.TryCommit();
                 }
             }
             finally
@@ -143,16 +158,13 @@ namespace ShieldedDb.Data
             Shield.SideEffect(null, () => {
                 // we run a dummy trans just to lock the key...
                 using (var cont = Shield.RunToCommit(10000, () => {
-                    if ((dict = TryGetDict<TKey, T>()) == null)
-                        _dictCache[type] = null;
+                    dict = TryGetDictWConflict<TKey, T>();
                 }))
                 {
-                    // ...if it's not empty, we just return. the above was a read-only trans.
+                    // ...if it's not empty, we just return. the above gets rolled back.
                     if (dict != null)
                         return;
-                    // this is kinda ugly! IDistributed's can only be changed in Repo transactions, so
-                    // we fake one, because Map needs it.
-                    dict = InFakeTransaction(() =>
+                    dict = Shield.InTransaction(() =>
                         new ShieldedDict<TKey, T>(
                             _backs[0].LoadAll<T>()
                             .Select(t => new KeyValuePair<TKey, T>(t.Id, Map.ToShielded(t)))));
@@ -165,45 +177,65 @@ namespace ShieldedDb.Data
             return null;
         }
 
-        static T InFakeTransaction<T>(Func<T> f)
-        {
-            var oldMeta = _ctx;
-            try
-            {
-                _ctx = new TransactionMeta();
-                return Shield.InTransaction(f);
-            }
-            finally
-            {
-                _ctx = oldMeta;
-            }
-        }
-
         public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
         {
             return InTransaction(() => TryGetDictOrLoad<TKey, T>()[id]);
         }
 
-        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
+        static ShieldedDict<TKey, T> TryGetDictWConflict<TKey, T>()
+        {
+            var dict = TryGetDict<TKey, T>();
+            _dictCache[typeof(T)] = dict;
+            return dict;
+        }
+
+        static bool Already(IDistributed entity, DataOpType opType)
+        {
+            DataOp exist;
+            return _ctx.ToDo.TryGetValue(entity, out exist) && exist.OpType == opType;
+        }
+
+        public static void Remove<TKey, T>(T source) where T : DistributedBase<TKey>
         {
             InTransaction(() => {
-                _ctx.ToDo.Add(DataOp.Delete(entity));
-                var dict = TryGetDict<TKey, T>();
+                var dict = TryGetDictWConflict<TKey, T>();
+                // if source is a random DTO, we try to find the reference shielded entity first
+                T entity = source;
                 if (dict != null)
+                {
+                    if (!dict.TryGetValue(source.Id, out entity))
+                        throw new KeyNotFoundException();
                     dict.Remove(entity.Id);
+                }
+                if (Already(entity, DataOpType.Insert))
+                    _ctx.ToDo.Remove(entity);
+                else
+                {
+                    // we need a read to make sure entity can be read after RunToCommit.
+                    var x = entity.Id;
+                    _ctx.ToDo[entity] = DataOp.Delete(entity);
+                }
             });
         }
 
-        public static void Insert<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
+        /// <summary>
+        /// Returns the "live", distributed entity, which will be ref-equal to your
+        /// object if it is a proxy already, or a new shielded proxy otherwise.
+        /// </summary>
+        public static T Insert<TKey, T>(T source) where T : DistributedBase<TKey>, new()
         {
-            InTransaction(() => {
-                var dict = TryGetDict<TKey, T>();
-                if (dict == null)
-                    // to make sure it stays null until the insert is done.
-                    _dictCache[typeof(T)] = null;
+            return InTransaction(() => {
+                var entity = Map.ToShielded(source);
+                var dict = TryGetDictWConflict<TKey, T>();
+                if (dict != null)
+                    dict.Add(entity.Id, entity);
+
+                var x = entity.Id;
+                if (Already(entity, DataOpType.Delete))
+                    _ctx.ToDo[entity].OpType = DataOpType.Update;
                 else
-                    dict.Add(entity.Id, Map.ToShielded(entity));
-                _ctx.ToDo.Add(DataOp.Insert(entity));
+                    _ctx.ToDo[entity] = DataOp.Insert(entity);
+                return entity;
             });
         }
     }
