@@ -27,11 +27,14 @@ namespace ShieldedDb.Data
         static readonly ShieldedDictNc<Type, TypeDict> _typeDicts =
             new ShieldedDictNc<Type, TypeDict>();
 
+        static Type Normalize(Type source)
+        {
+            return Factory.IsProxy(source) ? source.BaseType : source;
+        }
+
         static TypeDict GetTypeDict(Type type)
         {
-            Shield.AssertInTransaction();
-            if (Factory.IsProxy(type))
-                type = type.BaseType;
+            type = Normalize(type);
             TypeDict dict;
             if (!_typeDicts.TryGetValue(type, out dict))
             {
@@ -41,17 +44,11 @@ namespace ShieldedDb.Data
             return dict;
         }
 
-        public static bool IsImporting
-        {
-            get
-            {
-                return _importTransaction;
-            }
-        }
-
         public static bool IsTracked(IDistributed entity)
         {
-            return GetTypeDict(entity.GetType()).Entities.ContainsKey(entity.IdValue);
+            var type = Normalize(entity.GetType());
+            TypeDict dict;
+            return _typeDicts.TryGetValue(type, out dict) && dict.Entities.ContainsKey(entity.IdValue);
         }
 
         public static TRes Query<T, TRes>(Func<ShieldedDict<object, IDistributed>, TRes> query,
@@ -101,6 +98,14 @@ namespace ShieldedDb.Data
 
         [ThreadStatic]
         static bool _importTransaction;
+
+        public static bool IsImporting
+        {
+            get
+            {
+                return _importTransaction;
+            }
+        }
 
         public static void Import(IEnumerable<IDistributed> dtos)
         {
