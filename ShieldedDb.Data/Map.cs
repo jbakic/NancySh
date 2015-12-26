@@ -43,7 +43,7 @@ namespace ShieldedDb.Data
             return (T)res;
         }
 
-        private static void Copy(Type t, object source, object dest)
+        internal static void Copy(Type t, object source, object dest)
         {
             var properties = _properties.GetOrAdd(t, GetProperties);
             Shield.InTransaction(() => {

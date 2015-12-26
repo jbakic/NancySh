@@ -47,6 +47,7 @@
     <Compile Include="IDistributed.cs" />
     <Compile Include="IBackend.cs" />
     <Compile Include="SqlBackend.cs" />
+    <Compile Include="EntityDictionary.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

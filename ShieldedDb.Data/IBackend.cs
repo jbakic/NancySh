@@ -7,7 +7,7 @@ namespace ShieldedDb.Data
     public interface IBackend
     {
         Task<bool> Run(IEnumerable<DataOp> ops);
-        T[] LoadAll<T>() where T : class, IDistributed, new();
+        T[] LoadAll<T>() where T : IDistributed, new();
     }
 }
 

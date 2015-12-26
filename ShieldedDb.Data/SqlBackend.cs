@@ -53,7 +53,7 @@ namespace ShieldedDb.Data
             }
         }
 
-        public T[] LoadAll<T>() where T : class, IDistributed, new()
+        public T[] LoadAll<T>() where T : IDistributed, new()
         {
             var name = typeof(T).Name;
             Debug.WriteLine("Loading all {0}", (object)name);
