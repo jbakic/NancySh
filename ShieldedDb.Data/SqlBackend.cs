@@ -79,8 +79,8 @@ namespace ShieldedDb.Data
 
         private SqlOp Delete(IDistributed entity)
         {
-            var type = entity.GetType();
             return conn => {
+                var type = entity.GetType();
                 Debug.WriteLine("Deleting entity {0}[{1}]", type.Name, entity.IdValue);
                 conn.Execute(string.Format("delete from {0} where Id = @Id", type.Name),
                     new { Id = entity.IdValue });

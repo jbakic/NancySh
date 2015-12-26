@@ -134,6 +134,8 @@ namespace ShieldedDb.Data
 
         static void Merge(IDistributed old, IDistributed dto)
         {
+            // TODO: entities should get versions. only if the dto has a higher version than
+            // the old entity, then it's data should be copied like this.
             Map.Copy(old.GetType().BaseType, dto, old);
         }
     }
