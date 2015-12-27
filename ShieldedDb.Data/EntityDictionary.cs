@@ -7,7 +7,7 @@ using System.Threading;
 
 namespace ShieldedDb.Data
 {
-    public delegate TRes QueryFunc<TRes>(ShieldedDict<object, IDistributed> dict);
+    public delegate TRes QueryFunc<TKey, T, TRes>(IDictionary<TKey, T> dict) where T : DistributedBase<TKey>, new();
     public delegate IEnumerable<T> LoaderFunc<T>();
 
     /// <summary>
@@ -15,66 +15,36 @@ namespace ShieldedDb.Data
     /// </summary>
     static class EntityDictionary
     {
-        private class TypeDict
+        private struct TypeDict<TKey, T> where T : DistributedBase<TKey>
         {
-            public readonly ShieldedDict<object, IDistributed> Entities;
-            public readonly bool HasAll;
+            public ShieldedDict<TKey, T> Entities;
+            public bool HasAll;
 
-            public TypeDict(ShieldedDict<object, IDistributed> dict, bool hasAll)
-            {
-                Entities = dict ?? new ShieldedDict<object, IDistributed>();
-                HasAll = hasAll;
-            }
+            public static Shielded<TypeDict<TKey, T>> Ref = new Shielded<TypeDict<TKey, T>>(
+                new TypeDict<TKey, T> { Entities = new ShieldedDict<TKey, T>() });
         }
 
-        static readonly ShieldedDictNc<Type, TypeDict> _typeDicts =
-            new ShieldedDictNc<Type, TypeDict>();
-
-        static Type Normalize(Type source)
-        {
-            return Factory.IsProxy(source) ? source.BaseType : source;
-        }
-
-        static TypeDict GetTypeDict(Type type)
-        {
-            type = Normalize(type);
-            TypeDict dict;
-            if (!_typeDicts.TryGetValue(type, out dict))
-            {
-                dict = new TypeDict(dict != null ? dict.Entities : null, false);
-                _typeDicts[type] = dict;
-            }
-            return dict;
-        }
-
-        public static bool IsTracked(IDistributed entity)
-        {
-            var type = Normalize(entity.GetType());
-            TypeDict dict;
-            return _typeDicts.TryGetValue(type, out dict) && dict.Entities.ContainsKey(entity.IdValue);
-        }
-
-        public static TRes Query<T, TRes>(QueryFunc<TRes> query,
-            LoaderFunc<T> loader = null, bool loadsAll = false,
-            int allGetterTimeoutMs = Timeout.Infinite) where T : IDistributed, new()
+        public static TRes Query<TKey, T, TRes>(QueryFunc<TKey, T, TRes> query,
+            LoaderFunc<T> allGetter = null,
+            int allGetterTimeoutMs = Timeout.Infinite) where T : DistributedBase<TKey>, new()
         {
             return Shield.InTransaction(() => {
-                var dict = GetTypeDict(typeof(T));
-                if (dict.HasAll || loader == null)
+                var dict = TypeDict<TKey, T>.Ref.Value;
+                if (allGetter == null || dict.HasAll)
                     return query(dict.Entities);
 
                 // we'll need to load entities...
                 Shield.SideEffect(null, () => {
                     // we run a dummy trans just to lock the key...
-                    using (var cont = Shield.RunToCommit(allGetterTimeoutMs, () => {
-                        _typeDicts[typeof(T)] = dict = GetTypeDict(typeof(T));
-                    }))
+                    using (var cont = Shield.RunToCommit(allGetterTimeoutMs, () =>
+                        TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> td) => { dict = td; })))
                     {
                         // if someone beat us to it...
                         if (dict.HasAll)
                             return;
-                        Import((IEnumerable<IDistributed>)loader(), dict.Entities);
-                        cont.InContext(() => _typeDicts[typeof(T)] = new TypeDict(dict.Entities, loadsAll));
+                        Import(allGetter(), dict.Entities);
+                        cont.InContext(() => TypeDict<TKey, T>.Ref.Modify(
+                            (ref TypeDict<TKey, T> d) => d.HasAll = true));
                         cont.Commit();
                     }
                 });
@@ -83,25 +53,25 @@ namespace ShieldedDb.Data
             });
         }
 
-        public static bool HasAll<T>() where T : IDistributed
+        public static bool HasAll<TKey, T>() where T : DistributedBase<TKey>
         {
-            return GetTypeDict(typeof(T)).HasAll;
+            return TypeDict<TKey, T>.Ref.Value.HasAll;
         }
 
-        public static T Add<T>(T entity) where T : IDistributed
+        public static T Add<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
-            var dict = GetTypeDict(entity.GetType());
-            if (dict.Entities.ContainsKey(entity.IdValue))
+            var dict = TypeDict<TKey, T>.Ref.Value.Entities;
+            if (dict.ContainsKey(entity.Id))
                 throw new InvalidOperationException("Entity of the same type with same ID already known.");
             var res = Map.ToShielded(entity);
-            dict.Entities.Add(entity.IdValue, res);
+            dict.Add(entity.Id, res);
             return res;
         }
 
-        public static void Remove(IDistributed entity)
+        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
         {
-            var dict = GetTypeDict(entity.GetType());
-            if (!dict.Entities.Remove(entity.IdValue) && dict.HasAll)
+            var dict = TypeDict<TKey, T>.Ref.Value;
+            if (!dict.Entities.Remove(entity.Id) && dict.HasAll)
                 throw new KeyNotFoundException();
         }
 
@@ -116,12 +86,12 @@ namespace ShieldedDb.Data
             }
         }
 
-        public static void Import(IEnumerable<IDistributed> dtos)
+        public static void Import<TKey, T>(IEnumerable<T> dtos) where T : DistributedBase<TKey>, new()
         {
-            Import(dtos, null);
+            Import(dtos, TypeDict<TKey, T>.Ref.Value.Entities);
         }
 
-        static void Import(IEnumerable<IDistributed> dtos, ShieldedDict<object, IDistributed> specificDict)
+        static void Import<TKey, T>(IEnumerable<T> dtos, ShieldedDict<TKey, T> dict) where T : DistributedBase<TKey>, new()
         {
             if (Shield.IsInTransaction)
                 throw new InvalidOperationException("Import can not be a part of a bigger transaction.");
@@ -131,12 +101,11 @@ namespace ShieldedDb.Data
                 Shield.InTransaction(() => {
                     foreach (var dto in dtos)
                     {
-                        var dict = specificDict ?? GetTypeDict(dto.GetType()).Entities;
-                        IDistributed old;
-                        if (dict.TryGetValue(dto.IdValue, out old))
-                            Merge(old, dto);
+                        T old;
+                        if (dict.TryGetValue(dto.Id, out old))
+                            Merge(dto, old);
                         else
-                            dict[dto.IdValue] = Map.ToShielded(dto);
+                            dict[dto.Id] = Map.ToShielded(dto);
                     }
                 });
             }
@@ -146,7 +115,7 @@ namespace ShieldedDb.Data
             }
         }
 
-        static void Merge(IDistributed old, IDistributed dto)
+        static void Merge(IDistributed dto, IDistributed old)
         {
             // TODO: entities should get versions. only if the dto has a higher version than
             // the old entity, then it's data should be copied like this.

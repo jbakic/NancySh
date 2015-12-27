@@ -21,7 +21,7 @@ namespace ShieldedDb.Data
     /// </summary>
     public class Accessor<TKey, T> where T : DistributedBase<TKey>, new()
     {
-        public IEnumerable<T> GetAll() { return Repository.GetAll<T>(); }
+        public IEnumerable<T> GetAll() { return Repository.GetAll<TKey, T>(); }
 
         public T Find(TKey id) { return Repository.Find<TKey, T>(id); }
 
@@ -145,14 +145,14 @@ namespace ShieldedDb.Data
             return _backs[0].LoadAll<T>();
         }
 
-        public static IEnumerable<T> GetAll<T>() where T : IDistributed, new()
+        public static IEnumerable<T> GetAll<TKey, T>() where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query(dict => dict.Values.Cast<T>(), Loader<T>);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values, Loader<T>);
         }
 
         public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query(dict => (T)dict[id], Loader<T>);
+            return EntityDictionary.Query<TKey, T, T>(dict => dict[id], Loader<T>);
         }
 
         static bool Already(IDistributed entity, DataOpType opType)
@@ -164,7 +164,7 @@ namespace ShieldedDb.Data
         public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
         {
             InTransaction(() => {
-                EntityDictionary.Remove(entity);
+                EntityDictionary.Remove<TKey, T>(entity);
                 if (Already(entity, DataOpType.Insert))
                     _ctx.ToDo.Remove(entity);
                 else
@@ -179,7 +179,7 @@ namespace ShieldedDb.Data
         public static T Insert<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             return InTransaction(() => {
-                entity = EntityDictionary.Add(entity);
+                entity = EntityDictionary.Add<TKey, T>(entity);
                 if (Already(entity, DataOpType.Delete))
                     _ctx.ToDo[entity].OpType = DataOpType.Update;
                 else
