@@ -53,12 +53,10 @@ namespace ShieldedDb.Data
             Debug.WriteLine("Preparing {0} types.", types.Length);
             Factory.PrepareTypes(types);
 
-            // monitoring code turned off for now. IsTracked is potentially unscalable, which could make 
-            // this check into a bottleneck for ALL transactions on the system which mess with IDist implementors.
-//            Shield.WhenCommitting<IDistributed>(ds => {
-//                if (_ctx == null && !EntityDictionary.IsImporting && ds.Any(EntityDictionary.IsTracked))
-//                    throw new InvalidOperationException("Tracked entities can only be changed in repo transactions.");
-//            });
+            Shield.WhenCommitting<IDistributed>(ds => {
+                if (_ctx == null && !EntityDictionary.IsImporting)
+                    throw new InvalidOperationException("Distributables can only be changed in repo transactions.");
+            });
         }
 
         static void DetectUpdates(IEnumerable<TransactionField> tfs)
@@ -68,7 +66,7 @@ namespace ShieldedDb.Data
                 if (!field.HasChanges)
                     continue;
                 var entity = field.Field as IDistributed;
-                if (entity == null || _ctx.ToDo.ContainsKey(entity)/* || !EntityDictionary.IsTracked(entity)*/)
+                if (entity == null || _ctx.ToDo.ContainsKey(entity))
                     continue;
                 _ctx.ToDo.Add(entity, DataOp.Update(entity));
             }
