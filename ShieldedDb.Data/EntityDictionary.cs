@@ -7,6 +7,9 @@ using System.Threading;
 
 namespace ShieldedDb.Data
 {
+    public delegate TRes QueryFunc<TRes>(ShieldedDict<object, IDistributed> dict);
+    public delegate IEnumerable<T> LoaderFunc<T>();
+
     /// <summary>
     /// Global repo of all live entities.
     /// </summary>
@@ -51,12 +54,13 @@ namespace ShieldedDb.Data
             return _typeDicts.TryGetValue(type, out dict) && dict.Entities.ContainsKey(entity.IdValue);
         }
 
-        public static TRes Query<T, TRes>(Func<ShieldedDict<object, IDistributed>, TRes> query,
-            Func<IEnumerable<T>> allGetter = null, int allGetterTimeoutMs = Timeout.Infinite) where T : IDistributed
+        public static TRes Query<T, TRes>(QueryFunc<TRes> query,
+            LoaderFunc<T> loader = null, bool loadsAll = false,
+            int allGetterTimeoutMs = Timeout.Infinite) where T : IDistributed, new()
         {
             return Shield.InTransaction(() => {
                 var dict = GetTypeDict(typeof(T));
-                if (dict.HasAll || allGetter == null)
+                if (dict.HasAll || loader == null)
                     return query(dict.Entities);
 
                 // we'll need to load entities...
@@ -69,14 +73,19 @@ namespace ShieldedDb.Data
                         // if someone beat us to it...
                         if (dict.HasAll)
                             return;
-                        Import((IEnumerable<IDistributed>)allGetter(), dict.Entities);
-                        cont.InContext(() => _typeDicts[typeof(T)] = new TypeDict(dict.Entities, true));
+                        Import((IEnumerable<IDistributed>)loader(), dict.Entities);
+                        cont.InContext(() => _typeDicts[typeof(T)] = new TypeDict(dict.Entities, loadsAll));
                         cont.Commit();
                     }
                 });
                 Shield.Rollback();
                 return default(TRes);
             });
+        }
+
+        public static bool HasAll<T>() where T : IDistributed
+        {
+            return GetTypeDict(typeof(T)).HasAll;
         }
 
         public static T Add<T>(T entity) where T : IDistributed

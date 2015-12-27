@@ -43,7 +43,7 @@ namespace nancySh
         private object IndexView()
         {
             this.CreateNewCsrfToken();
-            return View["index", Test.Repo.GetAll().OrderBy(t => t.Id).ToArray()];
+            return View["index", Test.Repo.GetAll().Select(Map.NonShieldedClone).OrderBy(t => t.Id).ToArray()];
         }
     }
 }
