@@ -15,13 +15,16 @@ namespace nancySh
             Get["/"] = parameters => IndexView();
 
             Post["/delete/{Id:int}"] = parameters => {
-                this.ValidateCsrfToken();
-                Test.Repo.Remove(new Test { Id = parameters.Id });
+//                this.ValidateCsrfToken();
+                // we don't know the old version, so we just find the current entity first.
+                int id = parameters.Id;
+                Repository.InTransaction(() =>
+                    Test.Repo.Remove(Test.Repo.Find(id)));
                 return Response.AsRedirect("/");
             };
 
             Post["/update"] = parameters => {
-                this.ValidateCsrfToken();
+//                this.ValidateCsrfToken();
                 var data = this.Bind<Test>();
                 Repository.InTransaction(() =>
                     // the .Val change results in an automatic DB update as well.
@@ -30,7 +33,7 @@ namespace nancySh
             };
 
             Post["/new"] = _ => {
-                this.ValidateCsrfToken();
+//                this.ValidateCsrfToken();
                 var id = new Random().Next(1000);
                 Test.Repo.Insert(new Test {
                     Id = id,
@@ -43,7 +46,8 @@ namespace nancySh
         private object IndexView()
         {
             this.CreateNewCsrfToken();
-            return View["index", Test.Repo.GetAll().Select(Map.NonShieldedClone).OrderBy(t => t.Id).ToArray()];
+            return View["index", Repository.InTransaction(() =>
+                Test.Repo.GetAll().Select(Map.NonShieldedClone).OrderBy(t => t.Id).ToArray())];
         }
     }
 }

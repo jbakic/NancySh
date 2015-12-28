@@ -12,7 +12,7 @@ namespace ShieldedDb.Models
 
         public override string ToString()
         {
-            return string.Format("[Test: Id={0}, Val={1}]", Id, Val);
+            return string.Format("[Test: Id={0}, Version={1}, Val={2}]", Id, Version, Val);
         }
     }
 }

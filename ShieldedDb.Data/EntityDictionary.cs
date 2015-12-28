@@ -4,10 +4,12 @@ using System.Linq;
 using Shielded;
 using Shielded.ProxyGen;
 using System.Threading;
+using System.Reflection;
+using System.Collections.Concurrent;
 
 namespace ShieldedDb.Data
 {
-    public delegate TRes QueryFunc<TKey, T, TRes>(IDictionary<TKey, T> dict) where T : DistributedBase<TKey>, new();
+    public delegate TRes QueryFunc<TKey, T, TRes>(ShieldedDict<TKey, T> dict) where T : DistributedBase<TKey>, new();
     public delegate IEnumerable<T> LoaderFunc<T>();
 
     /// <summary>
@@ -71,8 +73,16 @@ namespace ShieldedDb.Data
         public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
-            if (!dict.Entities.Remove(entity.Id) && dict.HasAll)
+            T existing;
+            if (!dict.Entities.TryGetValue(entity.Id, out existing) && dict.HasAll)
                 throw new KeyNotFoundException();
+            if (existing != null)
+            {
+                dict.Entities.Remove(entity.Id);
+                // version was not yet increased
+                if (entity.Version != existing.Version)
+                    throw new ConcurrencyException();
+            }
         }
 
         [ThreadStatic]
@@ -115,11 +125,51 @@ namespace ShieldedDb.Data
             }
         }
 
-        static void Merge(IDistributed dto, IDistributed old)
+        static void Merge(DistributedBase dto, DistributedBase old)
         {
-            // TODO: entities should get versions. only if the dto has a higher version than
-            // the old entity, then it's data should be copied like this.
-            Map.Copy(old.GetType().BaseType, dto, old);
+            if (dto.Version > old.Version)
+                Map.Copy(old.GetType().BaseType, dto, old);
+        }
+
+        static ConcurrentDictionary<Type, MethodInfo> _performForType = new ConcurrentDictionary<Type, MethodInfo>();
+
+        static MethodInfo GetPerformForDto(DistributedBase dto)
+        {
+            return typeof(EntityDictionary)
+                .GetMethod("PerformExtern", BindingFlags.NonPublic | BindingFlags.Static)
+                .MakeGenericMethod(dto.IdValue.GetType(), dto.GetType());
+        }
+
+        public static bool PerformExtern(IEnumerable<DataOp> ops)
+        {
+            foreach (var typeGrp in ops.GroupBy(op => op.Entity.GetType()))
+            {
+                var perform = _performForType.GetOrAdd(typeGrp.Key, _ => GetPerformForDto(typeGrp.First().Entity));
+                foreach (var op in typeGrp)
+                    if (!(bool)perform.Invoke(null, new object[] { op.OpType, op.Entity }))
+                        return false;
+            }
+            return true;
+        }
+
+        static bool PerformExtern<TKey, T>(DataOpType opType, T dto) where T : DistributedBase<TKey>, new()
+        {
+            var dict = TypeDict<TKey, T>.Ref.Value.Entities;
+            T existing;
+            if (!dict.TryGetValue(dto.Id, out existing))
+            {
+                if (opType != DataOpType.Insert)
+                    return false;
+                dict[dto.Id] = Map.ToShielded(dto);
+                return true;
+            }
+            if (opType == DataOpType.Insert || dto.Version != existing.Version + 1)
+                return false;
+            if (opType == DataOpType.Delete)
+                dict.Remove(dto.Id);
+            else
+                Merge(dto, existing);
+            return true;
         }
     }
 }

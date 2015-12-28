@@ -19,7 +19,7 @@ namespace ShieldedDb.Data
         /// If shielded, returns the same object. If not, makes a shielded clone
         /// based on the object's actual type, not based on the generic type argument.
         /// </summary>
-        public static T ToShielded<T>(T source) where T : IDistributed
+        public static T ToShielded<T>(T source) where T : DistributedBase
         {
             var type = source.GetType();
             if (Factory.IsProxy(type))
@@ -33,7 +33,7 @@ namespace ShieldedDb.Data
         /// Always produces a new object, based on the input object's actual
         /// type (or, base type, if the object is a proxy).
         /// </summary>
-        public static T NonShieldedClone<T>(T source) where T : IDistributed
+        public static T NonShieldedClone<T>(T source) where T : DistributedBase
         {
             var entityType = source.GetType();
             if (Factory.IsProxy(entityType))

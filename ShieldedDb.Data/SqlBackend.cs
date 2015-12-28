@@ -53,7 +53,7 @@ namespace ShieldedDb.Data
             }
         }
 
-        public T[] LoadAll<T>() where T : IDistributed, new()
+        public T[] LoadAll<T>() where T : DistributedBase, new()
         {
             var name = typeof(T).Name;
             Debug.WriteLine("Loading all {0}", (object)name);
@@ -61,7 +61,7 @@ namespace ShieldedDb.Data
                 return conn.Query<T>(string.Format("select * from {0}", name)).ToArray();
         }
 
-        private SqlOp Insert(IDistributed entity)
+        private SqlOp Insert(DistributedBase entity)
         {
             return conn => {
                 Debug.WriteLine("Inserting entity {0}", entity);
@@ -69,7 +69,7 @@ namespace ShieldedDb.Data
             };
         }
 
-        private SqlOp Update(IDistributed entity)
+        private SqlOp Update(DistributedBase entity)
         {
             return conn => {
                 Debug.WriteLine("Updating entity {0}", entity);
@@ -77,7 +77,7 @@ namespace ShieldedDb.Data
             };
         }
 
-        private SqlOp Delete(IDistributed entity)
+        private SqlOp Delete(DistributedBase entity)
         {
             return conn => {
                 var type = entity.GetType();

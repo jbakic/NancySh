@@ -2,5 +2,6 @@
 
 create table Test (
     Id int primary key,
-    Val varchar(200) null
+    Val varchar(200) null,
+    Version int
 );

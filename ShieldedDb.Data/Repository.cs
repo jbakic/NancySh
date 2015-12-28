@@ -38,23 +38,28 @@ namespace ShieldedDb.Data
     {
         class TransactionMeta
         {
-            public readonly Dictionary<IDistributed, DataOp> ToDo = new Dictionary<IDistributed, DataOp>();
+            public readonly Dictionary<DistributedBase, DataOp> ToDo = new Dictionary<DistributedBase, DataOp>();
         }
+
+        public static int TransactionTimeout = 20000;
+
+        public static IEnumerable<Type> KnownTypes;
 
         static Repository()
         {
-            var iDist = typeof(IDistributed);
+            var iDist = typeof(DistributedBase);
             var distBase = typeof(DistributedBase<>);
             var types = AppDomain.CurrentDomain.GetAssemblies()
                 .SelectMany(asm =>
                     asm.GetTypes().Where(t =>
-                        t.IsClass && t != distBase && t.GetInterface(iDist.Name) != null))
+                        t.IsClass && t != distBase && t.IsSubclassOf(iDist)))
                 .ToArray();
             Debug.WriteLine("Preparing {0} types.", types.Length);
             Factory.PrepareTypes(types);
+            KnownTypes = types;
 
-            Shield.WhenCommitting<IDistributed>(ds => {
-                if (_ctx == null && !EntityDictionary.IsImporting)
+            Shield.WhenCommitting<DistributedBase>(ds => {
+                if (_ctx == null && !_externTransaction && !EntityDictionary.IsImporting)
                     throw new InvalidOperationException("Distributables can only be changed in repo transactions.");
             });
         }
@@ -65,7 +70,7 @@ namespace ShieldedDb.Data
             {
                 if (!field.HasChanges)
                     continue;
-                var entity = field.Field as IDistributed;
+                var entity = field.Field as DistributedBase;
                 if (entity == null || _ctx.ToDo.ContainsKey(entity))
                     continue;
                 _ctx.ToDo.Add(entity, DataOp.Update(entity));
@@ -83,7 +88,13 @@ namespace ShieldedDb.Data
         static Task<bool> RunDistro(CommitContinuation cont)
         {
             DataOp[] todos = null;
-            cont.InContext(() => todos = _ctx.ToDo.Values.Select(NonShClone).ToArray());
+            cont.InContext(() => {
+                foreach (var entity in _ctx.ToDo.Keys)
+                    entity.Version = entity.Version + 1;
+                todos = _ctx.ToDo.Values.Select(NonShClone).ToArray();
+            });
+            if (!todos.Any())
+                return Task.FromResult(true);
             return Task.WhenAll(
                 _backs.Select(b => b.Run(todos)))
                 .ContinueWith(boolsTask => boolsTask.Result.All(b => b));
@@ -118,11 +129,16 @@ namespace ShieldedDb.Data
 
             try
             {
-                _ctx = new TransactionMeta();
-                using (var continuation = Shield.RunToCommit(30000, act))
+                using (var continuation = Shield.RunToCommit(TransactionTimeout, () => {
+                    _ctx = new TransactionMeta();
+                    act();
+                }))
                 {
                     DetectUpdates(continuation.Fields);
-                    return RunDistro(continuation).Result && continuation.TryCommit();
+                    var distro = RunDistro(continuation);
+                    return distro.Wait(TransactionTimeout) &&
+                        distro.Result &&
+                        continuation.TryCommit();
                 }
             }
             finally
@@ -138,22 +154,24 @@ namespace ShieldedDb.Data
             return res;
         }
 
-        static IEnumerable<T> Loader<T>() where T : IDistributed, new()
+        static IEnumerable<T> Loader<T>() where T : DistributedBase, new()
         {
             return _backs[0].LoadAll<T>();
         }
 
-        public static IEnumerable<T> GetAll<TKey, T>() where T : DistributedBase<TKey>, new()
+        public static IEnumerable<T> GetAll<TKey, T>(bool localOnly = false) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values, Loader<T>);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values,
+                localOnly ? (LoaderFunc<T>)null : Loader<T>);
         }
 
-        public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
+        public static T Find<TKey, T>(TKey id, bool localOnly = false) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, T>(dict => dict[id], Loader<T>);
+            return EntityDictionary.Query<TKey, T, T>(dict => dict[id],
+                localOnly ? (LoaderFunc<T>)null : Loader<T>);
         }
 
-        static bool Already(IDistributed entity, DataOpType opType)
+        static bool Already(DistributedBase entity, DataOpType opType)
         {
             DataOp exist;
             return _ctx.ToDo.TryGetValue(entity, out exist) && exist.OpType == opType;
@@ -184,6 +202,61 @@ namespace ShieldedDb.Data
                     _ctx.ToDo[entity] = DataOp.Insert(entity);
                 return entity;
             });
+        }
+
+        [ThreadStatic]
+        static bool _externTransaction;
+
+        // prevents our WhenCommitting check from breaking the commit due to this not being a regular repo transaction.
+        private class NoCheckContinuation : CommitContinuation
+        {
+            private readonly CommitContinuation _cont;
+
+            public NoCheckContinuation(CommitContinuation inner)
+            {
+                _cont = inner;
+            }
+
+            public override void Commit()
+            {
+                if (!TryCommit())
+                    throw new InvalidOperationException("Commit failed.");
+            }
+
+            public override bool TryCommit()
+            {
+                try
+                {
+                    _externTransaction = true;
+                    return _cont.TryCommit();
+                }
+                finally
+                {
+                    _externTransaction = false;
+                }
+            }
+
+            public override void Rollback() { _cont.Rollback(); }
+            public override bool TryRollback() { return _cont.TryRollback(); }
+            public override void InContext(Action act) { _cont.InContext(act); }
+            public override TransactionField[] Fields { get { return _cont.Fields; } }
+        }
+
+        /// <summary>
+        /// If it's OK with the ops, it will return a continuation, otherwise null.
+        /// </summary>
+        public static CommitContinuation PrepareExtern(IEnumerable<DataOp> ops, int? timeoutOverride = null)
+        {
+            if (Shield.IsInTransaction)
+                throw new InvalidOperationException("Not allowed in transaction.");
+            bool outcome = false;
+            var cont = Shield.RunToCommit(timeoutOverride ?? TransactionTimeout, () => {
+                outcome = EntityDictionary.PerformExtern(ops);
+            });
+            if (outcome)
+                return new NoCheckContinuation(cont);
+            cont.TryRollback();
+            return null;
         }
     }
 }

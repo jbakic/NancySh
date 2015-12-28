@@ -13,24 +13,24 @@ namespace ShieldedDb.Data
     public class DataOp
     {
         public DataOpType OpType;
-        public IDistributed Entity;
+        public DistributedBase Entity;
 
-        public static DataOp Insert(IDistributed entity)
+        public static DataOp Insert(DistributedBase entity)
         {
-            // to make sure it's readable after a RunToCommit completes.
-            var o = entity.IdValue;
+            // to make sure it's writable after a RunToCommit completes.
+            entity.Version = entity.Version;
             return new DataOp { OpType = DataOpType.Insert, Entity = entity };
         }
 
-        public static DataOp Update(IDistributed entity)
+        public static DataOp Update(DistributedBase entity)
         {
-            var o = entity.IdValue;
+            // here no, cause this is called out of trans context.
             return new DataOp { OpType = DataOpType.Update, Entity = entity };
         }
 
-        public static DataOp Delete(IDistributed entity)
+        public static DataOp Delete(DistributedBase entity)
         {
-            var o = entity.IdValue;
+            entity.Version = entity.Version;
             return new DataOp { OpType = DataOpType.Delete, Entity = entity };
         }
     }

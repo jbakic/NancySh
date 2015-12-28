@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using Nancy.Hosting.Self;
 using Nancy;
 using ShieldedDb.Data;
@@ -11,11 +12,21 @@ namespace nancySh
     {
         public static void Main(string[] args)
         {
-            Console.WriteLine("Hello World @ port 8080 / Press Enter to quit...");
+            if (args.Length < 1)
+            {
+                Console.WriteLine("Please specify ID of server.");
+                return;
+            }
+            var id = int.Parse(args[0]);
+            var config = ServerConfig.Load("ServerConfig.xml");
+            var server = config.Servers.First(s => s.Id == id);
+
+            Console.WriteLine("Hello World @ {0} -- Press Enter to quit...", server.BaseUrl);
             StaticConfiguration.DisableErrorTraces = false;
-            Repository.AddBackend(new SqlBackend(
-                () => new NpgsqlConnection(ConfigurationManager.AppSettings["DatabaseConnectionString"])));
-            using (var host = new NancyHost(new Uri("http://localhost:8080/"), new Application()))
+//            Repository.AddBackend(new SqlBackend(
+//                () => new NpgsqlConnection(ConfigurationManager.AppSettings["DatabaseConnectionString"])));
+            DTModule.InitBackend(config, id);
+            using (var host = new NancyHost(new Uri(server.BaseUrl), new Application()))
             {
                 host.Start();
                 Console.ReadLine();
