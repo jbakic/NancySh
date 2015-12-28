@@ -78,10 +78,10 @@ namespace ShieldedDb.Data
                 throw new KeyNotFoundException();
             if (existing != null)
             {
-                dict.Entities.Remove(entity.Id);
                 // version was not yet increased
                 if (entity.Version != existing.Version)
                     throw new ConcurrencyException();
+                dict.Entities.Remove(entity.Id);
             }
         }
 
