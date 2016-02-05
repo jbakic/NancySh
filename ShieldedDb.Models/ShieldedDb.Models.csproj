@@ -30,7 +30,7 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.4.2.1\lib\net40\Shielded.dll</HintPath>
+      <HintPath>..\packages\Shielded.4.2.3\lib\net40\Shielded.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

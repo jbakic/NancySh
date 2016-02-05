@@ -35,10 +35,10 @@
     <Reference Include="Dapper">
       <HintPath>..\packages\Dapper.1.42\lib\net45\Dapper.dll</HintPath>
     </Reference>
-    <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.4.2.1\lib\net40\Shielded.dll</HintPath>
-    </Reference>
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="Shielded">
+      <HintPath>..\packages\Shielded.4.2.3\lib\net40\Shielded.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
