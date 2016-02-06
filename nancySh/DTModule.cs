@@ -28,10 +28,10 @@ namespace nancySh
             Get["/list/Test"] = _ => {
                 var serializer = new DataContractJsonSerializer(typeof(DataList));
                 var dataList = new DataList {
-                    Entities = Repository.InTransaction(() => Repository.HasAll<int, Test>()
-                        ? Repository.GetAll<int, Test>(true)
-                            .Select(Map.NonShieldedClone).Cast<DistributedBase>().ToList()
-                        : null),
+                    Entities = Repository.InTransaction(() => Repository.GetAll<int, Test>()
+                        .Select(Map.NonShieldedClone)
+                        .Cast<DistributedBase>()
+                        .ToList()),
                 };
                 return new Response
                 {
