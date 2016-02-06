@@ -90,7 +90,10 @@ namespace nancySh
                     {
                         return Task.FromResult(false);
                     }
-                }));
+                })).ContinueWith(t => {
+                    if (!t.Result)
+                        throw new ApplicationException("Failed commit!");
+                });
         }
 
         protected override void Abort(Guid transactionId)
@@ -114,7 +117,7 @@ namespace nancySh
         {
             var name = typeof(T).Name;
             Console.WriteLine("Loading all {0}", name);
-            return _config.Servers.Where(s => s.Id != _myId).AsParallel().SelectManyParallelSafe(s => {
+            return _config.Servers.Where(s => s.Id != _myId).SelectManyParallelSafe(s => {
                 try
                 {
                     var req = WebRequest.Create(string.Format(
