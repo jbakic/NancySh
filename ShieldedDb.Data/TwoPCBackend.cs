@@ -6,21 +6,38 @@ using Shielded;
 
 namespace ShieldedDb.Data
 {
+    public class TwoPCFailedException : Exception
+    {
+        public bool FailedDuringCommit { get; set; }
+
+        public TwoPCFailedException(bool failedInCommit, AggregateException inner)
+            : base(null, inner)
+        {
+            FailedDuringCommit = failedInCommit;
+        }
+    }
+
     /// <summary>
     /// Base class for a backend which supports 2-phase commit via some kind of
     /// messages.
     /// </summary>
     public abstract class TwoPCBackend : IBackend
     {
-        public Task<bool> Run(IEnumerable<DataOp> ops)
+        public Task<BackendResult> Run(IEnumerable<DataOp> ops)
         {
             var transId = Guid.NewGuid();
             return Prepare(transId, ops)
-                .ContinueWith(prepareTask => {
-                    if (prepareTask.Result)
-                        return Commit(transId).Result;
-                    Abort(transId);
-                    return false;
+                .ContinueWith((Task<BackendResult> prepareTask) => {
+                    if (prepareTask.Exception != null || !prepareTask.Result.Ok)
+                    {
+                        Abort(transId);
+                        return prepareTask.Result;
+                    }
+                    return Commit(transId).ContinueWith(commitTask => {
+                        if (commitTask.Exception != null)
+                            throw commitTask.Exception;
+                        return new BackendResult(true);
+                    }).Result;
                 });
         }
 
@@ -28,20 +45,20 @@ namespace ShieldedDb.Data
         /// Override should send prepare messages to all involved servers. Returned task should
         /// finish when the complete outcome is known.
         /// </summary>
-        protected abstract Task<bool> Prepare(Guid transactionId, IEnumerable<DataOp> ops);
+        protected abstract Task<BackendResult> Prepare(Guid transactionId, IEnumerable<DataOp> ops);
 
         /// <summary>
         /// Override should send commit messages to all involved servers. Returned task should
         /// finish when the complete outcome is known.
         /// </summary>
-        protected abstract Task<bool> Commit(Guid transactionId);
+        protected abstract Task Commit(Guid transactionId);
 
         /// <summary>
         /// Override should send abort messages, and return without waiting for response.
         /// </summary>
         protected abstract void Abort(Guid transactionId);
 
-        public abstract T[] LoadAll<T>() where T : DistributedBase, new();
+        public abstract IEnumerable<T> LoadAll<T>() where T : DistributedBase, new();
 
         private readonly ShieldedDict<Guid, CommitContinuation> _transactions = new ShieldedDict<Guid, CommitContinuation>();
 

@@ -6,6 +6,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Collections.Generic;
 using Dapper;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ShieldedDb.Data
@@ -21,10 +22,11 @@ namespace ShieldedDb.Data
             _connFactory = connFactory;
         }
 
-        public Task<bool> Run(IEnumerable<DataOp> p)
+        public Task<BackendResult> Run(IEnumerable<DataOp> p)
         {
             return Task.Run(() => {
                 using (var conn = _connFactory())
+                try
                 {
                     conn.Open();
                     using (var tran = conn.BeginTransaction(IsolationLevel.ReadCommitted))
@@ -32,8 +34,12 @@ namespace ShieldedDb.Data
                         foreach (var op in p.Select(Convert))
                             op(conn);
                         tran.Commit();
-                        return true;
+                        return new BackendResult(true);
                     }
+                }
+                catch
+                {
+                    return new BackendResult(p);
                 }
             });
         }
@@ -53,7 +59,7 @@ namespace ShieldedDb.Data
             }
         }
 
-        public T[] LoadAll<T>() where T : DistributedBase, new()
+        public IEnumerable<T> LoadAll<T>() where T : DistributedBase, new()
         {
             var name = typeof(T).Name;
             Debug.WriteLine("Loading all {0}", (object)name);
@@ -91,7 +97,8 @@ namespace ShieldedDb.Data
 
         string GetInsertSql(Type entityType)
         {
-            var props = entityType.GetProperties();
+            var props = entityType.GetProperties()
+                .Where(pi => pi.Name != "IdValue");
             StringBuilder sb = new StringBuilder();
             sb.Append("insert into ");
             sb.Append(entityType.Name);
@@ -113,7 +120,7 @@ namespace ShieldedDb.Data
         string GetUpdateSql(Type entityType)
         {
             var props = entityType.GetProperties()
-                .Where(pi => pi.Name != "Id");
+                .Where(pi => pi.Name != "Id" && pi.Name != "IdValue");
             StringBuilder sb = new StringBuilder();
             sb.Append("update ");
             sb.Append(entityType.Name);

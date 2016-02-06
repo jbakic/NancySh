@@ -51,6 +51,7 @@
     <Compile Include="TwoPCBackend.cs" />
     <Compile Include="DistributedBase.cs" />
     <Compile Include="ConcurrencyException.cs" />
+    <Compile Include="EnumerableExt.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

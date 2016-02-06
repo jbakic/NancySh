@@ -87,15 +87,24 @@
     <None Include="fonts\glyphicons-halflings-regular.ttf" />
     <None Include="fonts\glyphicons-halflings-regular.woff" />
     <None Include="fonts\glyphicons-halflings-regular.woff2" />
-    <None Include="js\npm.js">
+    <None Include="js\bootstrap.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="js\bootstrap.js" />
-    <None Include="js\bootstrap.min.js" />
-    <None Include="js\jquery-2.2.0.js" />
-    <None Include="js\jquery-2.2.0.min.js" />
-    <None Include="js\jquery-2.2.0.min.map" />
-    <None Include="js\jquery-2.2.0-vsdoc.js" />
+    <None Include="js\bootstrap.min.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="js\jquery-2.2.0.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="js\jquery-2.2.0.min.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="js\jquery-2.2.0.min.map">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="js\jquery-2.2.0-vsdoc.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Views\" />

@@ -17,7 +17,7 @@ namespace ShieldedDb.Data
     /// </summary>
     static class EntityDictionary
     {
-        private struct TypeDict<TKey, T> where T : DistributedBase<TKey>
+        struct TypeDict<TKey, T> where T : DistributedBase<TKey>
         {
             public ShieldedDict<TKey, T> Entities;
             public bool HasAll;
@@ -44,7 +44,10 @@ namespace ShieldedDb.Data
                         // if someone beat us to it...
                         if (dict.HasAll)
                             return;
-                        Import(allGetter(), dict.Entities);
+                        var all = allGetter();
+                        if (all == null)
+                            throw new ApplicationException(string.Format("Unable to load all {0}", typeof(T).Name));
+                        Import(all, dict.Entities);
                         cont.InContext(() => TypeDict<TKey, T>.Ref.Modify(
                             (ref TypeDict<TKey, T> d) => d.HasAll = true));
                         cont.Commit();
@@ -96,6 +99,27 @@ namespace ShieldedDb.Data
             }
         }
 
+        static ConcurrentDictionary<Type, MethodInfo> _importForType = new ConcurrentDictionary<Type, MethodInfo>();
+
+        static MethodInfo GetImportForDto(DistributedBase dto)
+        {
+            return typeof(EntityDictionary)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "Import" && m.IsGenericMethod)
+                .MakeGenericMethod(dto.IdValue.GetType(), dto.GetType());
+        }
+
+        public static void Import(IEnumerable<DistributedBase> entities)
+        {
+            if (entities == null || !entities.Any())
+                return;
+            foreach (var typeGrp in entities.GroupBy(e => e.GetType()))
+            {
+                var import = _importForType.GetOrAdd(typeGrp.Key, _ => GetImportForDto(typeGrp.First()));
+                import.Invoke(null, new object[] { typeGrp });
+            }
+        }
+
         public static void Import<TKey, T>(IEnumerable<T> dtos) where T : DistributedBase<TKey>, new()
         {
             Import(dtos, TypeDict<TKey, T>.Ref.Value.Entities);
@@ -129,6 +153,28 @@ namespace ShieldedDb.Data
         {
             if (dto.Version > old.Version)
                 Map.Copy(old.GetType().BaseType, dto, old);
+        }
+
+        static ConcurrentDictionary<Type, MethodInfo> _invalidateForType = new ConcurrentDictionary<Type, MethodInfo>();
+
+        static MethodInfo GetInvalidateForType(Type t)
+        {
+            return typeof(EntityDictionary)
+                .GetMethod("Invalidate", BindingFlags.NonPublic | BindingFlags.Static)
+                .MakeGenericMethod(t.GetProperty("Id").PropertyType, t);
+        }
+
+        public static void Invalidate(IEnumerable<Type> invalidate)
+        {
+            foreach (var t in invalidate)
+                _invalidateForType.GetOrAdd(t, GetInvalidateForType).Invoke(null, null);
+        }
+
+        static void Invalidate<TKey, T>() where T : DistributedBase<TKey>
+        {
+            Shield.InTransaction(() => {
+                TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> d) => d.HasAll = false);
+            });
         }
 
         static ConcurrentDictionary<Type, MethodInfo> _performForType = new ConcurrentDictionary<Type, MethodInfo>();

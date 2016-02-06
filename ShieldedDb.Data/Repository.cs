@@ -41,7 +41,7 @@ namespace ShieldedDb.Data
             public readonly Dictionary<DistributedBase, DataOp> ToDo = new Dictionary<DistributedBase, DataOp>();
         }
 
-        public static int TransactionTimeout = 20000;
+        public static int TransactionTimeout = 5000;
 
         public static IEnumerable<Type> KnownTypes;
 
@@ -85,7 +85,7 @@ namespace ShieldedDb.Data
             };
         }
 
-        static Task<bool> RunDistro(CommitContinuation cont)
+        static Task<BackendResult> RunDistro(CommitContinuation cont)
         {
             DataOp[] todos = null;
             cont.InContext(() => {
@@ -94,17 +94,14 @@ namespace ShieldedDb.Data
                 todos = _ctx.ToDo.Values.Select(NonShClone).ToArray();
             });
             if (!todos.Any())
-                return Task.FromResult(true);
+                return Task.FromResult(new BackendResult(true));
             return Task.WhenAll(
                 _backs.Select(b => b.Run(todos)))
-                .ContinueWith(boolsTask => boolsTask.Result.All(b => b));
+                    .ContinueWith(res => BackendResult.Merge(res.Result));
         }
 
         static IBackend[] _backs = new IBackend[0];
 
-        /// <summary>
-        /// Currently, only the first back-end is used for loading.
-        /// </summary>
         public static void AddBackend(IBackend back)
         {
             IBackend[] oldBacks, newBacks = _backs;
@@ -129,16 +126,24 @@ namespace ShieldedDb.Data
 
             try
             {
-                using (var continuation = Shield.RunToCommit(TransactionTimeout, () => {
+                using (var continuation = Shield.RunToCommit(/*TransactionTimeout*/Timeout.Infinite, () => {
                     _ctx = new TransactionMeta();
                     act();
                 }))
                 {
                     DetectUpdates(continuation.Fields);
                     var distro = RunDistro(continuation);
-                    return distro.Wait(TransactionTimeout) &&
-                        distro.Result &&
-                        continuation.TryCommit();
+                    if (!distro.Wait(TransactionTimeout))
+                        return false;
+                    if (!distro.Result.Ok)
+                    {
+                        if (distro.Result.Update != null)
+                            EntityDictionary.Import(distro.Result.Update);
+                        if (distro.Result.Invalidate != null)
+                            EntityDictionary.Invalidate(distro.Result.Invalidate);
+                        return false;
+                    }
+                    return continuation.TryCommit();
                 }
             }
             finally
@@ -156,7 +161,12 @@ namespace ShieldedDb.Data
 
         static IEnumerable<T> Loader<T>() where T : DistributedBase, new()
         {
-            return _backs[0].LoadAll<T>();
+            return _backs.SelectManyParallelSafe(b => b.LoadAll<T>());
+        }
+
+        public static bool HasAll<TKey, T>() where T : DistributedBase<TKey>
+        {
+            return EntityDictionary.HasAll<TKey, T>();
         }
 
         public static IEnumerable<T> GetAll<TKey, T>(bool localOnly = false) where T : DistributedBase<TKey>, new()

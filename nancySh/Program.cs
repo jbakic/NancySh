@@ -23,8 +23,6 @@ namespace nancySh
 
             Console.WriteLine("Hello World @ {0} -- Press Enter to quit...", server.BaseUrl);
             StaticConfiguration.DisableErrorTraces = false;
-//            Repository.AddBackend(new SqlBackend(
-//                () => new NpgsqlConnection(ConfigurationManager.AppSettings["DatabaseConnectionString"])));
             DTModule.InitBackend(config, id);
             using (var host = new NancyHost(new Uri(server.BaseUrl), new Application()))
             {

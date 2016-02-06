@@ -50,31 +50,46 @@ namespace nancySh
                 });
         }
 
-        protected override Task<bool> Prepare(Guid transactionId, IEnumerable<DataOp> ops)
+        protected override Task<BackendResult> Prepare(Guid transactionId, IEnumerable<DataOp> ops)
         {
             Console.WriteLine("Preparing transaction {0}", transactionId);
             var trans = new DTransaction { Id = transactionId, Operations = ops.ToList() };
             return WhenAllSucceed(transactionId,
                 _config.Servers.Where(s => s.Id != _myId).Select(s => {
-                    var serializer = new DataContractJsonSerializer(typeof(DTransaction));
-                    var req = WebRequest.Create(s.BaseUrl + "/dt/prepare");
-                    req.Method = "POST";
-                    req.ContentType = "application/json";
-                    serializer.WriteObject(req.GetRequestStream(), trans);
-                    return GetResponseAsync(req);
-                }));
+                    try
+                    {
+                        var serializer = new DataContractJsonSerializer(typeof(DTransaction));
+                        var req = WebRequest.Create(s.BaseUrl + "/dt/prepare");
+                        req.Method = "POST";
+                        req.ContentType = "application/json";
+                        serializer.WriteObject(req.GetRequestStream(), trans);
+                        return GetResponseAsync(req);
+                    }
+                    catch
+                    {
+                        return Task.FromResult(false);
+                    }
+                })).ContinueWith(boolTask => boolTask.Result ?
+                    new BackendResult(true) : new BackendResult(ops));
         }
 
-        protected override Task<bool> Commit(Guid transactionId)
+        protected override Task Commit(Guid transactionId)
         {
             Console.WriteLine("Committing transaction {0}", transactionId);
             return WhenAllSucceed(transactionId,
                 _config.Servers.Where(s => s.Id != _myId).Select(s => {
-                    var req = WebRequest.Create(
-                        string.Format("{0}/{1}/{2}", s.BaseUrl, "dt/commit", transactionId));
-                    req.Method = "POST";
-                    req.ContentLength = 0;
-                    return GetResponseAsync(req);
+                    try
+                    {
+                        var req = WebRequest.Create(
+                            string.Format("{0}/{1}/{2}", s.BaseUrl, "dt/commit", transactionId));
+                        req.Method = "POST";
+                        req.ContentLength = 0;
+                        return GetResponseAsync(req);
+                    }
+                    catch
+                    {
+                        return Task.FromResult(false);
+                    }
                 }));
         }
 
@@ -83,34 +98,41 @@ namespace nancySh
             Console.WriteLine("Aborting transaction {0}", transactionId);
             foreach (var server in _config.Servers.Where(s => s.Id != _myId))
             {
-                var req = WebRequest.Create(string.Format(
-                    "{0}/{1}/{2}", server.BaseUrl, "dt/abort", transactionId));
-                req.Method = "POST";
-                req.ContentLength = 0;
-                req.BeginGetResponse(ar => { }, null);
+                try
+                {
+                    var req = WebRequest.Create(string.Format(
+                        "{0}/{1}/{2}", server.BaseUrl, "dt/abort", transactionId));
+                    req.Method = "POST";
+                    req.ContentLength = 0;
+                    req.BeginGetResponse(ar => { }, null);
+                }
+                catch { }
             }
         }
 
-        public override T[] LoadAll<T>()
+        public override IEnumerable<T> LoadAll<T>()
         {
-            Console.WriteLine("Loading all {0}", typeof(T).Name);
-            var server = SelectRandomServer();
-            var req = WebRequest.Create(string.Format(
-                "{0}/{1}/{2}", server.BaseUrl, "dt/list", typeof(T).Name));
-            var resp = (HttpWebResponse)req.GetResponse();
-            Console.WriteLine("Load complete with HTTP {0}", resp.StatusCode);
-            if (resp.StatusCode != HttpStatusCode.OK)
-                return new T[0];
-            var serializer = new DataContractJsonSerializer(typeof(DataList));
-            return ((DataList)serializer.ReadObject(resp.GetResponseStream())).Entities.Cast<T>().ToArray();
-        }
-
-        Server SelectRandomServer()
-        {
-            var ind = new Random().Next(_config.Servers.Length);
-            if (_config.Servers[ind].Id == _myId)
-                ind = (ind + 1) % _config.Servers.Length;
-            return _config.Servers[ind];
+            var name = typeof(T).Name;
+            Console.WriteLine("Loading all {0}", name);
+            return _config.Servers.Where(s => s.Id != _myId).AsParallel().SelectManyParallelSafe(s => {
+                try
+                {
+                    var req = WebRequest.Create(string.Format(
+                        "{0}/{1}/{2}", s.BaseUrl, "dt/list", name));
+                    var resp = (HttpWebResponse)req.GetResponse();
+                    Console.WriteLine("Load complete with HTTP {0}", resp.StatusCode);
+                    if (resp.StatusCode != HttpStatusCode.OK)
+                        return null;
+                    var serializer = new DataContractJsonSerializer(typeof(DataList));
+                    var l = (DataList)serializer.ReadObject(resp.GetResponseStream());
+                    Console.WriteLine("Loaded {0}", l.Entities == null ? "null" : l.Entities.Count.ToString());
+                    return l.Entities != null ? l.Entities.Cast<T>() : null;
+                }
+                catch
+                {
+                    return null;
+                }
+            }) ?? Enumerable.Empty<T>(); // if all have empty, empty is all.
         }
 
         public bool PrepareExt(DTransaction trans)
