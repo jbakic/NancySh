@@ -117,18 +117,16 @@ namespace nancySh
         {
             var name = typeof(T).Name;
             Console.WriteLine("Loading all {0}", name);
-            return _config.Servers.Where(s => s.Id != _myId).SelectManyParallelSafe(s => {
+            var res = _config.Servers.Where(s => s.Id != _myId).SelectManyParallelSafe(s => {
                 try
                 {
                     var req = WebRequest.Create(string.Format(
                         "{0}/{1}/{2}", s.BaseUrl, "dt/list", name));
                     var resp = (HttpWebResponse)req.GetResponse();
-                    Console.WriteLine("Load complete with HTTP {0}", resp.StatusCode);
                     if (resp.StatusCode != HttpStatusCode.OK)
                         return null;
                     var serializer = new DataContractJsonSerializer(typeof(DataList));
                     var l = (DataList)serializer.ReadObject(resp.GetResponseStream());
-                    Console.WriteLine("Loaded {0}", l.Entities == null ? "null" : l.Entities.Count.ToString());
                     return l.Entities != null ? l.Entities.Cast<T>() : null;
                 }
                 catch
@@ -136,6 +134,8 @@ namespace nancySh
                     return null;
                 }
             }) ?? Enumerable.Empty<T>(); // if all have empty, empty is all.
+            Console.WriteLine("Loaded {0}", res.Count());
+            return res;
         }
 
         public bool PrepareExt(DTransaction trans)

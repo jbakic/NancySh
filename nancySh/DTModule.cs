@@ -9,28 +9,39 @@ using ShieldedDb.Models;
 using System.Threading.Tasks;
 using System.Runtime.Serialization.Json;
 using System.IO;
+using System.Reflection;
 
 namespace nancySh
 {
     public class DTModule : NancyModule
     {
         static DTBackend _backend;
+        static Dictionary<Type, MethodInfo> _getters = new Dictionary<Type, MethodInfo>();
 
         public static void InitBackend(ServerConfig config, int myId)
         {
             _backend = new DTBackend(config, myId);
             Repository.AddBackend(_backend);
-            Test.Repo.GetAll();
+            foreach (var typ in Repository.KnownTypes)
+            {
+                var method = typeof(Repository)
+                    .GetMethod("GetAll", BindingFlags.Public | BindingFlags.Static)
+                    .MakeGenericMethod(typ.GetProperty("Id").PropertyType, typ);
+                _getters[typ] = method;
+                method.Invoke(null, new object[] { false });
+            }
         }
 
         public DTModule() : base("dt")
         {
-            Get["/list/Test"] = _ => {
+            Get["/list/{typ}"] = parameters => {
                 var serializer = new DataContractJsonSerializer(typeof(DataList));
                 var dataList = new DataList {
-                    Entities = Repository.InTransaction(() => Repository.GetAll<int, Test>(true)
+                    Entities = Repository.InTransaction(() =>
+                        ((IEnumerable<DistributedBase>)
+                            _getters[Repository.KnownTypes.First(t => t.Name == parameters.typ)]
+                            .Invoke(null, new object[] { false }))
                         .Select(Map.NonShieldedClone)
-                        .Cast<DistributedBase>()
                         .ToList()),
                 };
                 return new Response
