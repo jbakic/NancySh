@@ -30,6 +30,19 @@ namespace nancySh
             _myId = myId;
         }
 
+        bool Owns(int serverIndex, DistributedBase d)
+        {
+            var hash = d.IdValue.GetHashCode();
+            int first = hash % _config.Servers.Length;
+            int second = (first + 1) % _config.Servers.Length;
+            return serverIndex == first || serverIndex == second;
+        }
+
+        IEnumerable<Server> Owners(IEnumerable<DataOp> ops)
+        {
+            return _config.Servers.Where((s, ind) => s.Id != _myId && ops.Any(op => Owns(ind, op.Entity)));
+        }
+
         static Task<bool> GetResponseAsync(WebRequest req)
         {
             return req.GetResponseAsync()
@@ -55,7 +68,7 @@ namespace nancySh
             Console.WriteLine("Preparing transaction {0}", transactionId);
             var trans = new DTransaction { Id = transactionId, Operations = ops.ToList() };
             return WhenAllSucceed(transactionId,
-                _config.Servers.Where(s => s.Id != _myId).Select(s => {
+                Owners(ops).Select(s => {
                     try
                     {
                         var serializer = new DataContractJsonSerializer(typeof(DTransaction));
@@ -73,11 +86,11 @@ namespace nancySh
                     new BackendResult(true) : new BackendResult(ops));
         }
 
-        protected override Task Commit(Guid transactionId)
+        protected override Task Commit(Guid transactionId, IEnumerable<DataOp> ops)
         {
             Console.WriteLine("Committing transaction {0}", transactionId);
             return WhenAllSucceed(transactionId,
-                _config.Servers.Where(s => s.Id != _myId).Select(s => {
+                Owners(ops).Select(s => {
                     try
                     {
                         var req = WebRequest.Create(
@@ -96,10 +109,10 @@ namespace nancySh
                 });
         }
 
-        protected override void Abort(Guid transactionId)
+        protected override void Abort(Guid transactionId, IEnumerable<DataOp> ops)
         {
             Console.WriteLine("Aborting transaction {0}", transactionId);
-            foreach (var server in _config.Servers.Where(s => s.Id != _myId))
+            foreach (var server in Owners(ops))
             {
                 try
                 {

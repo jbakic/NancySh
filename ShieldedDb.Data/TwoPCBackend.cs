@@ -30,10 +30,10 @@ namespace ShieldedDb.Data
                 .ContinueWith((Task<BackendResult> prepareTask) => {
                     if (prepareTask.Exception != null || !prepareTask.Result.Ok)
                     {
-                        Abort(transId);
+                        Abort(transId, ops);
                         return prepareTask.Result;
                     }
-                    return Commit(transId).ContinueWith(commitTask => {
+                    return Commit(transId, ops).ContinueWith(commitTask => {
                         if (commitTask.Exception != null)
                             throw commitTask.Exception;
                         return new BackendResult(true);
@@ -51,12 +51,12 @@ namespace ShieldedDb.Data
         /// Override should send commit messages to all involved servers. Returned task should
         /// finish when the complete outcome is known.
         /// </summary>
-        protected abstract Task Commit(Guid transactionId);
+        protected abstract Task Commit(Guid transactionId, IEnumerable<DataOp> ops);
 
         /// <summary>
         /// Override should send abort messages, and return without waiting for response.
         /// </summary>
-        protected abstract void Abort(Guid transactionId);
+        protected abstract void Abort(Guid transactionId, IEnumerable<DataOp> ops);
 
         public abstract IEnumerable<T> LoadAll<T>() where T : DistributedBase, new();
 
