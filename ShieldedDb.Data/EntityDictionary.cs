@@ -47,7 +47,7 @@ namespace ShieldedDb.Data
                         var all = allGetter();
                         if (all == null)
                             throw new ApplicationException(string.Format("Unable to load all {0}", typeof(T).Name));
-                        ImportIntoDict(all, dict.Entities);
+                        ImportTransaction(() => ImportInt(all, dict.Entities));
                         cont.InContext(() => TypeDict<TKey, T>.Ref.Modify(
                             (ref TypeDict<TKey, T> d) => d.HasAll = true));
                         cont.Commit();
@@ -121,39 +121,44 @@ namespace ShieldedDb.Data
 
         public static void Import(IEnumerable<DistributedBase> entities)
         {
-            foreach (var typeGrp in entities.GroupBy(e => e.GetType()))
-            {
-                var import = _importForType.GetOrAdd(typeGrp.Key, _ => GetImportForDto(typeGrp.First()));
-                import.Invoke(null, new object[] { typeGrp });
-            }
+            ImportTransaction(() => {
+                foreach (var typeGrp in entities.GroupBy(e => e.GetType()))
+                {
+                    var import = _importForType.GetOrAdd(typeGrp.Key, _ => GetImportForDto(typeGrp.First()));
+                    import.Invoke(null, new object[] { typeGrp });
+                }
+            });
         }
 
         static void Import<TKey, T>(IEnumerable<DistributedBase> dtos) where T : DistributedBase<TKey>, new()
         {
-            ImportIntoDict(dtos.Cast<T>(), TypeDict<TKey, T>.Ref.Value.Entities);
+            ImportInt(dtos.Cast<T>(), TypeDict<TKey, T>.Ref.Value.Entities);
         }
 
-        static void ImportIntoDict<TKey, T>(IEnumerable<T> dtos, ShieldedDict<TKey, T> dict) where T : DistributedBase<TKey>, new()
+        static void ImportTransaction(Action act)
         {
             if (Shield.IsInTransaction)
                 throw new InvalidOperationException("Import can not be a part of a bigger transaction.");
             try
             {
                 _importTransaction = true;
-                Shield.InTransaction(() => {
-                    foreach (var dto in dtos)
-                    {
-                        T old;
-                        if (dict.TryGetValue(dto.Id, out old))
-                            Merge(dto, old);
-                        else
-                            dict[dto.Id] = Map.ToShielded(dto);
-                    }
-                });
+                Shield.InTransaction(act);
             }
             finally
             {
                 _importTransaction = false;
+            }
+        }
+
+        static void ImportInt<TKey, T>(IEnumerable<T> dtos, ShieldedDict<TKey, T> dict) where T : DistributedBase<TKey>, new()
+        {
+            foreach (var dto in dtos)
+            {
+                T old;
+                if (dict.TryGetValue(dto.Id, out old))
+                    Merge(dto, old);
+                else
+                    dict[dto.Id] = Map.ToShielded(dto);
             }
         }
 
