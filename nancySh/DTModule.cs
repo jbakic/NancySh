@@ -28,7 +28,7 @@ namespace nancySh
             Get["/list/Test"] = _ => {
                 var serializer = new DataContractJsonSerializer(typeof(DataList));
                 var dataList = new DataList {
-                    Entities = Repository.InTransaction(() => Repository.GetAll<int, Test>()
+                    Entities = Repository.InTransaction(() => Repository.GetAll<int, Test>(true)
                         .Select(Map.NonShieldedClone)
                         .Cast<DistributedBase>()
                         .ToList()),
