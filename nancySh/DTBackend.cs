@@ -63,11 +63,23 @@ namespace nancySh
                 });
         }
 
+        static Task<BackendResult> WhenAllMerge(Guid transactionId, IEnumerable<Task<BackendResult>> tasks)
+        {
+            return Task.WhenAll(tasks)
+                .ContinueWith(backsTask => {
+                    if (backsTask.Exception != null)
+                        return new BackendResult(false);
+                    var res = backsTask.Result.All(b => b.Ok);
+                    Console.WriteLine("{0} {1}", res ? "Success" : "Fail", transactionId);
+                    return BackendResult.Merge(backsTask.Result);
+                });
+        }
+
         protected override Task<BackendResult> Prepare(Guid transactionId, IEnumerable<DataOp> ops)
         {
             Console.WriteLine("Preparing transaction {0}", transactionId);
             var trans = new DTransaction { Id = transactionId, Operations = ops.ToList() };
-            return WhenAllSucceed(transactionId,
+            return WhenAllMerge(transactionId,
                 Owners(ops).Select(s => {
                     try
                     {
@@ -76,14 +88,16 @@ namespace nancySh
                         req.Method = "POST";
                         req.ContentType = "application/json";
                         serializer.WriteObject(req.GetRequestStream(), trans);
-                        return GetResponseAsync(req);
+                        return req.GetResponseAsync().ContinueWith(taskResp =>
+                            taskResp.Exception != null ? new BackendResult(false) :
+                            ((HttpWebResponse)taskResp.Result).StatusCode != HttpStatusCode.OK ? new BackendResult(ops) :
+                            new BackendResult(true));
                     }
                     catch
                     {
-                        return Task.FromResult(false);
+                        return Task.FromResult(new BackendResult(false));
                     }
-                })).ContinueWith(boolTask => boolTask.Result ?
-                    new BackendResult(true) : new BackendResult(ops));
+                }));
         }
 
         protected override Task Commit(Guid transactionId, IEnumerable<DataOp> ops)
