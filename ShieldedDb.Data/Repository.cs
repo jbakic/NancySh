@@ -32,6 +32,11 @@ namespace ShieldedDb.Data
         /// object if it is a proxy already, or a new shielded proxy otherwise.
         /// </summary>
         public T Insert(T entity) { return Repository.Insert<TKey, T>(entity); }
+
+        /// <summary>
+        /// Returns the "live", distributed entity.
+        /// </summary>
+        public T Update(T entity) { return Repository.Update<TKey, T>(entity); }
     }
 
     public static class Repository
@@ -64,17 +69,19 @@ namespace ShieldedDb.Data
             });
         }
 
-        static void DetectUpdates(IEnumerable<TransactionField> tfs)
+        static void DetectUpdates(CommitContinuation cont)
         {
-            foreach (var field in tfs)
-            {
-                if (!field.HasChanges)
-                    continue;
-                var entity = field.Field as DistributedBase;
-                if (entity == null || _ctx.ToDo.ContainsKey(entity))
-                    continue;
-                _ctx.ToDo.Add(entity, DataOp.Update(entity));
-            }
+            cont.InContext(tfs => {
+                foreach (var field in tfs)
+                {
+                    if (!field.HasChanges)
+                        continue;
+                    var entity = field.Field as DistributedBase;
+                    if (entity == null || _ctx.ToDo.ContainsKey(entity))
+                        continue;
+                    _ctx.ToDo.Add(entity, DataOp.Update(entity));
+                }
+            });
         }
 
         static DataOp NonShClone(DataOp source)
@@ -126,17 +133,18 @@ namespace ShieldedDb.Data
 
             try
             {
-                using (var continuation = Shield.RunToCommit(/*TransactionTimeout*/Timeout.Infinite, () => {
+                using (var continuation = Shield.RunToCommit(TransactionTimeout, () => {
                     _ctx = new TransactionMeta();
                     act();
                 }))
                 {
-                    DetectUpdates(continuation.Fields);
+                    DetectUpdates(continuation);
                     var distro = RunDistro(continuation);
                     if (!distro.Wait(TransactionTimeout))
                         return false;
                     if (!distro.Result.Ok)
                     {
+                        continuation.TryRollback();
                         if (distro.Result.Update != null)
                             EntityDictionary.Import(distro.Result.Update);
                         if (distro.Result.Invalidate != null)
@@ -181,17 +189,17 @@ namespace ShieldedDb.Data
                 localOnly ? (LoaderFunc<T>)null : Loader<T>);
         }
 
-        static bool Already(DistributedBase entity, DataOpType opType)
+        static DataOpType? Already(DistributedBase entity)
         {
             DataOp exist;
-            return _ctx.ToDo.TryGetValue(entity, out exist) && exist.OpType == opType;
+            return _ctx.ToDo.TryGetValue(entity, out exist) ? (DataOpType?)exist.OpType : null;
         }
 
         public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
         {
             InTransaction(() => {
                 EntityDictionary.Remove<TKey, T>(entity);
-                if (Already(entity, DataOpType.Insert))
+                if (Already(entity) == DataOpType.Insert)
                     _ctx.ToDo.Remove(entity);
                 else
                     _ctx.ToDo[entity] = DataOp.Delete(entity);
@@ -206,10 +214,26 @@ namespace ShieldedDb.Data
         {
             return InTransaction(() => {
                 entity = EntityDictionary.Add<TKey, T>(entity);
-                if (Already(entity, DataOpType.Delete))
+                if (Already(entity) == DataOpType.Delete)
                     _ctx.ToDo[entity].OpType = DataOpType.Update;
                 else
                     _ctx.ToDo[entity] = DataOp.Insert(entity);
+                return entity;
+            });
+        }
+
+        /// <summary>
+        /// Returns the "live", distributed entity.
+        /// </summary>
+        public static T Update<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
+        {
+            return InTransaction(() => {
+                entity = EntityDictionary.Update<TKey, T>(entity);
+                var already = Already(entity);
+                if (already == DataOpType.Delete)
+                    throw new KeyNotFoundException("Entity with given key does not exist.");
+                if (!already.HasValue)
+                    _ctx.ToDo[entity] = DataOp.Update(entity);
                 return entity;
             });
         }

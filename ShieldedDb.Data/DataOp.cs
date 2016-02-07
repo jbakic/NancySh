@@ -24,7 +24,7 @@ namespace ShieldedDb.Data
 
         public static DataOp Update(DistributedBase entity)
         {
-            // here no, cause this is called out of trans context.
+            entity.Version = entity.Version;
             return new DataOp { OpType = DataOpType.Update, Entity = entity };
         }
 

@@ -14,21 +14,20 @@ namespace nancySh
         {
             Get["/"] = parameters => IndexView();
 
-            Post["/delete/{Id:int}"] = parameters => {
+            Post["/delete/{Id:int}/{Version:int}"] = parameters => {
 //                this.ValidateCsrfToken();
-                // we don't know the old version, so we just find the current entity first.
-                int id = parameters.Id;
                 Repository.InTransaction(() =>
-                    Test.Repo.Remove(Test.Repo.Find(id)));
+                    Test.Repo.Remove(new Test {
+                        Id = parameters.Id,
+                        Version = parameters.Version,
+                    }));
                 return Response.AsRedirect("/");
             };
 
             Post["/update"] = parameters => {
 //                this.ValidateCsrfToken();
                 var data = this.Bind<Test>();
-                Repository.InTransaction(() =>
-                    // the .Val change results in an automatic DB update as well.
-                    Test.Repo.Find(data.Id).Val = data.Val);
+                Repository.InTransaction(() => Test.Repo.Update(data));
                 return Response.AsRedirect("/");
             };
 

@@ -24,12 +24,13 @@
                 <form id="form@t.Id" method="post" action="/update">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="Id" value="@t.Id"/>
+                    <input type="hidden" name="Version" value="@t.Version"/>
                     <input type="text" name="Val" value="@t.Val"/>
                     <input type="submit" value="Edit"/>
                 </form>
             </td>
             <td>
-                @Html.PostButton(string.Format("/delete/{0}", t.Id), "Delete")
+                @Html.PostButton(string.Format("/delete/{0}/{1}", t.Id, t.Version), "Delete")
             </td>
         </tr>
     }

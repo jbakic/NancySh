@@ -14,7 +14,7 @@ namespace ShieldedDb.Data
     public class BackendResult
     {
         public readonly bool Ok;
-        public readonly IEnumerable<Type> Invalidate;
+        public readonly IEnumerable<DistributedBase> Invalidate;
         public readonly IEnumerable<DistributedBase> Update;
 
         public BackendResult(bool res)
@@ -22,7 +22,7 @@ namespace ShieldedDb.Data
             Ok = res;
         }
 
-        public BackendResult(IEnumerable<Type> invalidate, IEnumerable<DistributedBase> update)
+        public BackendResult(IEnumerable<DistributedBase> invalidate, IEnumerable<DistributedBase> update)
         {
             Ok = false;
             Invalidate = invalidate;
@@ -32,7 +32,7 @@ namespace ShieldedDb.Data
         public BackendResult(IEnumerable<DataOp> failedOps)
         {
             Ok = false;
-            Invalidate = failedOps.Select(op => op.Entity.GetType());
+            Invalidate = failedOps.Select(op => op.Entity);
         }
 
         public static BackendResult Merge(params BackendResult[] res)

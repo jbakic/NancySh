@@ -47,7 +47,7 @@ namespace ShieldedDb.Data
                         var all = allGetter();
                         if (all == null)
                             throw new ApplicationException(string.Format("Unable to load all {0}", typeof(T).Name));
-                        Import(all, dict.Entities);
+                        ImportIntoDict(all, dict.Entities);
                         cont.InContext(() => TypeDict<TKey, T>.Ref.Modify(
                             (ref TypeDict<TKey, T> d) => d.HasAll = true));
                         cont.Commit();
@@ -73,6 +73,18 @@ namespace ShieldedDb.Data
             return res;
         }
 
+        public static T Update<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
+        {
+            var dict = TypeDict<TKey, T>.Ref.Value.Entities;
+            T old;
+            if (!dict.TryGetValue(entity.Id, out old))
+                throw new InvalidOperationException("Entity does not exist.");
+            if (entity.Version < old.Version)
+                throw new ConcurrencyException();
+            Map.Copy(old.GetType().BaseType, entity, old);
+            return old;
+        }
+
         public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
@@ -81,8 +93,7 @@ namespace ShieldedDb.Data
                 throw new KeyNotFoundException();
             if (existing != null)
             {
-                // version was not yet increased
-                if (entity.Version != existing.Version)
+                if (entity.Version < existing.Version)
                     throw new ConcurrencyException();
                 dict.Entities.Remove(entity.Id);
             }
@@ -104,15 +115,12 @@ namespace ShieldedDb.Data
         static MethodInfo GetImportForDto(DistributedBase dto)
         {
             return typeof(EntityDictionary)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Import" && m.IsGenericMethod)
+                .GetMethod("Import", BindingFlags.NonPublic | BindingFlags.Static)
                 .MakeGenericMethod(dto.IdValue.GetType(), dto.GetType());
         }
 
         public static void Import(IEnumerable<DistributedBase> entities)
         {
-            if (entities == null || !entities.Any())
-                return;
             foreach (var typeGrp in entities.GroupBy(e => e.GetType()))
             {
                 var import = _importForType.GetOrAdd(typeGrp.Key, _ => GetImportForDto(typeGrp.First()));
@@ -120,12 +128,12 @@ namespace ShieldedDb.Data
             }
         }
 
-        public static void Import<TKey, T>(IEnumerable<T> dtos) where T : DistributedBase<TKey>, new()
+        static void Import<TKey, T>(IEnumerable<DistributedBase> dtos) where T : DistributedBase<TKey>, new()
         {
-            Import(dtos, TypeDict<TKey, T>.Ref.Value.Entities);
+            ImportIntoDict(dtos.Cast<T>(), TypeDict<TKey, T>.Ref.Value.Entities);
         }
 
-        static void Import<TKey, T>(IEnumerable<T> dtos, ShieldedDict<TKey, T> dict) where T : DistributedBase<TKey>, new()
+        static void ImportIntoDict<TKey, T>(IEnumerable<T> dtos, ShieldedDict<TKey, T> dict) where T : DistributedBase<TKey>, new()
         {
             if (Shield.IsInTransaction)
                 throw new InvalidOperationException("Import can not be a part of a bigger transaction.");
@@ -164,16 +172,22 @@ namespace ShieldedDb.Data
                 .MakeGenericMethod(t.GetProperty("Id").PropertyType, t);
         }
 
-        public static void Invalidate(IEnumerable<Type> invalidate)
-        {
-            foreach (var t in invalidate)
-                _invalidateForType.GetOrAdd(t, GetInvalidateForType).Invoke(null, null);
-        }
-
-        static void Invalidate<TKey, T>() where T : DistributedBase<TKey>
+        public static void Invalidate(IEnumerable<DistributedBase> invalidate)
         {
             Shield.InTransaction(() => {
-                TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> d) => d.HasAll = false);
+                foreach (var typeGrp in invalidate.GroupBy(e => e.GetType()))
+                    _invalidateForType.GetOrAdd(typeGrp.Key, GetInvalidateForType)
+                        .Invoke(null, new object[] { typeGrp });
+            });
+        }
+
+        static void Invalidate<TKey, T>(IEnumerable<DistributedBase> entities) where T : DistributedBase<TKey>, new()
+        {
+            TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> d) => {
+                d.HasAll = false;
+                foreach (var e in entities.Cast<T>())
+                    if (d.Entities.ContainsKey(e.Id))
+                        d.Entities.Remove(e.Id);
             });
         }
 
@@ -209,7 +223,7 @@ namespace ShieldedDb.Data
                 dict[dto.Id] = Map.ToShielded(dto);
                 return true;
             }
-            if (opType == DataOpType.Insert || dto.Version != existing.Version + 1)
+            if (opType == DataOpType.Insert || dto.Version <= existing.Version)
                 return false;
             if (opType == DataOpType.Delete)
                 dict.Remove(dto.Id);
