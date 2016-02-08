@@ -175,12 +175,12 @@ namespace ShieldedDb.Data
 
         public static IEnumerable<T> GetAll<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check).ToArray(), query);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check), query);
         }
 
         public static IEnumerable<T> GetLocal<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check).ToArray(), null);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check), null);
         }
 
         public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
@@ -252,12 +252,6 @@ namespace ShieldedDb.Data
                 _cont = inner;
             }
 
-            public override void Commit()
-            {
-                if (!TryCommit())
-                    throw new InvalidOperationException("Commit failed.");
-            }
-
             public override bool TryCommit()
             {
                 try
@@ -271,7 +265,6 @@ namespace ShieldedDb.Data
                 }
             }
 
-            public override void Rollback() { _cont.Rollback(); }
             public override bool TryRollback() { return _cont.TryRollback(); }
             public override void InContext(Action act) { _cont.InContext(act); }
             public override TransactionField[] Fields { get { return _cont.Fields; } }
