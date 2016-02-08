@@ -58,7 +58,7 @@ namespace ShieldedDb.Data
         /// </summary>
         protected abstract void Abort(Guid transactionId, IEnumerable<DataOp> ops);
 
-        public abstract IEnumerable<T> LoadAll<T>() where T : DistributedBase, new();
+        public abstract QueryResult<T> Query<T>(Query query) where T : DistributedBase, new();
 
         private readonly ShieldedDict<Guid, CommitContinuation> _transactions = new ShieldedDict<Guid, CommitContinuation>();
 

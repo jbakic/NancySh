@@ -21,7 +21,7 @@ namespace ShieldedDb.Data
     /// </summary>
     public class Accessor<TKey, T> where T : DistributedBase<TKey>, new()
     {
-        public IEnumerable<T> GetAll() { return Repository.GetAll<TKey, T>(); }
+        public IEnumerable<T> GetAll() { return Repository.GetAll<TKey, T>(Query.All); }
 
         public T Find(TKey id) { return Repository.Find<TKey, T>(id); }
 
@@ -79,6 +79,7 @@ namespace ShieldedDb.Data
                     var entity = field.Field as DistributedBase;
                     if (entity == null || _ctx.ToDo.ContainsKey(entity))
                         continue;
+                    entity = EntityDictionary.Update(entity);
                     _ctx.ToDo.Add(entity, DataOp.Update(entity));
                 }
             });
@@ -167,26 +168,26 @@ namespace ShieldedDb.Data
             return res;
         }
 
-        static IEnumerable<T> Loader<T>() where T : DistributedBase, new()
+        internal static QueryResult<T> RunQuery<T>(Query query) where T : DistributedBase, new()
         {
-            return _backs.SelectManyParallelSafe(b => b.LoadAll<T>());
+            return _backs.QueryParallelSafe(b => b.Query<T>(query));
         }
 
-        public static bool HasAll<TKey, T>() where T : DistributedBase<TKey>
+        public static IEnumerable<T> GetAll<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.HasAll<TKey, T>();
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check).ToArray(), query);
         }
 
-        public static IEnumerable<T> GetAll<TKey, T>(bool localOnly = false) where T : DistributedBase<TKey>, new()
+        public static IEnumerable<T> GetLocal<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values,
-                localOnly ? (LoaderFunc<T>)null : Loader<T>);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check).ToArray(), null);
         }
 
-        public static T Find<TKey, T>(TKey id, bool localOnly = false) where T : DistributedBase<TKey>, new()
+        public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, T>(dict => dict[id],
-                localOnly ? (LoaderFunc<T>)null : Loader<T>);
+            return
+                EntityDictionary.Query<TKey, T, T>(dict => dict.ContainsKey(id) ? dict[id] : null, null) ??
+                EntityDictionary.Query<TKey, T, T>(dict => dict[id], Query.All);
         }
 
         static DataOpType? Already(DistributedBase entity)

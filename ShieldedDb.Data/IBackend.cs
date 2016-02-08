@@ -8,7 +8,7 @@ namespace ShieldedDb.Data
     public interface IBackend
     {
         Task<BackendResult> Run(IEnumerable<DataOp> ops);
-        IEnumerable<T> LoadAll<T>() where T : DistributedBase, new();
+        QueryResult<T> Query<T>(Query query) where T : DistributedBase, new();
     }
 
     public class BackendResult
@@ -42,6 +42,28 @@ namespace ShieldedDb.Data
                 new BackendResult(
                     res.Any(r => r.Invalidate != null) ? res.Where(r => r.Invalidate != null).SelectMany(r => r.Invalidate) : null,
                     res.Any(r => r.Update != null) ? res.Where(r => r.Update != null).SelectMany(r => r.Update) : null);
+        }
+    }
+
+    public class QueryResult<T> where T : DistributedBase
+    {
+        public readonly bool QueryOwned;
+        public readonly IEnumerable<T> Result;
+        public readonly IEnumerable<T> Owned; // if QueryOwned, == Result
+
+        public QueryResult(bool queryOwned, IEnumerable<T> res = null, IEnumerable<T> owned = null)
+        {
+            QueryOwned = queryOwned;
+            Result = res ?? Enumerable.Empty<T>();
+            Owned = QueryOwned ? Result : (owned ?? Enumerable.Empty<T>());
+        }
+
+        public static QueryResult<T> Merge(IEnumerable<QueryResult<T>> res)
+        {
+            return new QueryResult<T>(
+                res.Any(r => r.QueryOwned),
+                res.SelectMany(r => r.Result),
+                res.SelectMany(r => r.Owned));
         }
     }
 }

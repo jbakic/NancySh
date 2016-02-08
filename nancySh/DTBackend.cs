@@ -19,6 +19,50 @@ namespace nancySh
         public List<DistributedBase> Entities;
     }
 
+    public class OwnershipQuery : Query
+    {
+        public int ServerId;
+        public int ServerCount;
+
+        public static bool Check(int serverId, int serverCount, DistributedBase d)
+        {
+            var hash = d.IdValue.GetHashCode();
+            int first = hash % serverCount + 1;
+            int second = (first + 1) % serverCount + 1;
+            return serverId == first || serverId == second;
+        }
+
+        public override bool Check(DistributedBase d)
+        {
+            return Check(ServerId, ServerCount, d);
+        }
+
+        public override bool Equals(Query other)
+        {
+            var ownOther = other as OwnershipQuery;
+            return ownOther != null &&
+                ownOther.ServerId == ServerId &&
+                ownOther.ServerCount == ServerCount;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = 17;
+                hash = hash * 23 + GetType().GetHashCode();
+                hash = hash * 23 + ServerId.GetHashCode();
+                hash = hash * 23 + ServerCount.GetHashCode();
+                return hash;
+            }
+        }
+
+        public override string ToString()
+        {
+            return string.Format("OwnershipQuery({0}/{1})", ServerId, ServerCount);
+        }
+    }
+
     public class DTBackend : TwoPCBackend
     {
         private ServerConfig _config;
@@ -30,17 +74,10 @@ namespace nancySh
             _myId = myId;
         }
 
-        bool Owns(int serverIndex, DistributedBase d)
-        {
-            var hash = d.IdValue.GetHashCode();
-            int first = hash % _config.Servers.Length;
-            int second = (first + 1) % _config.Servers.Length;
-            return serverIndex == first || serverIndex == second;
-        }
-
         IEnumerable<Server> Owners(IEnumerable<DataOp> ops)
         {
-            return _config.Servers.Where((s, ind) => s.Id != _myId && ops.Any(op => Owns(ind, op.Entity)));
+            return _config.Servers.Where(s => s.Id != _myId &&
+                ops.Any(op => OwnershipQuery.Check(s.Id, _config.Servers.Length, op.Entity)));
         }
 
         static Task<bool> GetResponseAsync(WebRequest req)
@@ -140,28 +177,40 @@ namespace nancySh
             }
         }
 
-        public override IEnumerable<T> LoadAll<T>()
+        private bool OwnsQuery(Query q)
+        {
+            var ownQ = q as OwnershipQuery;
+            return ownQ != null && ownQ.ServerId == _myId;
+        }
+
+        public override QueryResult<T> Query<T>(Query query)
         {
             var name = typeof(T).Name;
-            Console.WriteLine("Loading all {0}", name);
-            var res = _config.Servers.Where(s => s.Id != _myId).SelectManyParallelSafe(s => {
+            Console.WriteLine("Running query {0}/{1}", name, query);
+            bool owned = OwnsQuery(query);
+            var res = _config.Servers.Where(s => s.Id != _myId).QueryParallelSafe(s => {
                 try
                 {
+                    var querySerializer = new DataContractJsonSerializer(typeof(Query));
                     var req = WebRequest.Create(string.Format(
-                        "{0}/{1}/{2}", s.BaseUrl, "dt/list", name));
+                        "{0}/{1}/{2}", s.BaseUrl, "dt/query", name));
+                    req.Method = "POST";
+                    req.ContentType = "application/json";
+                    querySerializer.WriteObject(req.GetRequestStream(), query);
+
                     var resp = (HttpWebResponse)req.GetResponse();
                     if (resp.StatusCode != HttpStatusCode.OK)
                         return null;
-                    var serializer = new DataContractJsonSerializer(typeof(DataList));
-                    var l = (DataList)serializer.ReadObject(resp.GetResponseStream());
-                    return l.Entities != null ? l.Entities.Cast<T>() : null;
+                    var listSerializer = new DataContractJsonSerializer(typeof(DataList));
+                    var l = (DataList)listSerializer.ReadObject(resp.GetResponseStream());
+                    return new QueryResult<T>(owned, l.Entities != null ? l.Entities.Cast<T>() : null);
                 }
                 catch
                 {
-                    return null;
+                    return new QueryResult<T>(owned);
                 }
-            }) ?? Enumerable.Empty<T>(); // if all have empty, empty is all.
-            Console.WriteLine("Loaded {0}", res.Count());
+            }) ?? new QueryResult<T>(owned); // if all have empty, empty is all.
+            Console.WriteLine("Loaded {0}", res.Result.Count());
             return res;
         }
 

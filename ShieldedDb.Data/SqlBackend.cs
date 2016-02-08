@@ -59,12 +59,15 @@ namespace ShieldedDb.Data
             }
         }
 
-        public IEnumerable<T> LoadAll<T>() where T : DistributedBase, new()
+        public QueryResult<T> Query<T>(Query query) where T : DistributedBase, new()
         {
             var name = typeof(T).Name;
             Debug.WriteLine("Loading all {0}", (object)name);
             using (var conn = _connFactory())
-                return conn.Query<T>(string.Format("select * from {0}", name)).ToArray();
+                return new QueryResult<T>(true,
+                    conn.Query<T>(string.Format("select * from {0}", name))
+                    .Where(query.Check)
+                    .ToArray());
         }
 
         private SqlOp Insert(DistributedBase entity)

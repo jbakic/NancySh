@@ -22,25 +22,32 @@ namespace nancySh
         {
             _backend = new DTBackend(config, myId);
             Repository.AddBackend(_backend);
+            var ownershipQ = new OwnershipQuery { ServerId = myId, ServerCount = config.Servers.Length };
             foreach (var typ in Repository.KnownTypes)
             {
                 var method = typeof(Repository)
-                    .GetMethod("GetAll", BindingFlags.Public | BindingFlags.Static)
+                    .GetMethod("GetLocal", BindingFlags.Public | BindingFlags.Static)
                     .MakeGenericMethod(typ.GetProperty("Id").PropertyType, typ);
                 _getters[typ] = method;
-                method.Invoke(null, new object[] { false });
+
+                var ownedGetter = typeof(Repository)
+                    .GetMethod("GetAll", BindingFlags.Public | BindingFlags.Static)
+                    .MakeGenericMethod(typ.GetProperty("Id").PropertyType, typ);
+                ownedGetter.Invoke(null, new object[] { ownershipQ });
             }
         }
 
         public DTModule() : base("dt")
         {
-            Get["/list/{typ}"] = parameters => {
+            Post["/query/{typ}"] = parameters => {
+                var typ = Repository.KnownTypes.First(t => t.Name == parameters.typ);
+                var querySerializer = new DataContractJsonSerializer(typeof(Query));
+                var query = querySerializer.ReadObject(Request.Body);
+
                 var serializer = new DataContractJsonSerializer(typeof(DataList));
                 var dataList = new DataList {
                     Entities = Repository.InTransaction(() =>
-                        ((IEnumerable<DistributedBase>)
-                            _getters[Repository.KnownTypes.First(t => t.Name == parameters.typ)]
-                            .Invoke(null, new object[] { false }))
+                        ((IEnumerable<DistributedBase>)_getters[typ].Invoke(null, new[] { query }))
                         .Select(Map.NonShieldedClone)
                         .ToList()),
                 };
