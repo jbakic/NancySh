@@ -196,7 +196,7 @@ namespace ShieldedDb.Data
             return _ctx.ToDo.TryGetValue(entity, out exist) ? (DataOpType?)exist.OpType : null;
         }
 
-        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
+        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             InTransaction(() => {
                 EntityDictionary.Remove<TKey, T>(entity);

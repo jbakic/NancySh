@@ -6,6 +6,7 @@ using Shielded.ProxyGen;
 using System.Threading;
 using System.Reflection;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace ShieldedDb.Data
 {
@@ -16,86 +17,90 @@ namespace ShieldedDb.Data
     /// </summary>
     static class EntityDictionary
     {
-        struct TypeDict<TKey, T> where T : DistributedBase<TKey>
+        struct TypeDict<TKey, T> where T : DistributedBase<TKey>, new()
         {
             public ShieldedDict<TKey, T> Entities;
-            public Tuple<Query, IDictionary<TKey, T>>[] CachedQueries;
+            public Query[] OwnedQueries;
+            public Tuple<Query, ShieldedDict<TKey, T>>[] CachedQueries;
 
             public static Shielded<TypeDict<TKey, T>> Ref = new Shielded<TypeDict<TKey, T>>(
                 new TypeDict<TKey, T> {
                     Entities = new ShieldedDict<TKey, T>(),
-                    CachedQueries = new Tuple<Query, IDictionary<TKey, T>>[0],
+                    OwnedQueries = new Query[0],
+                    CachedQueries = new Tuple<Query, ShieldedDict<TKey, T>>[0],
                 });
-        }
 
-        public static TRes Query<TKey, T, TRes>(QueryFunc<TKey, T, TRes> queryFunc, Query query) where T : DistributedBase<TKey>, new()
-        {
-            return Shield.InTransaction(() => {
-                var dictOuter = TypeDict<TKey, T>.Ref.Value;
-                if (query == null)
-                    return queryFunc(dictOuter.Entities);
-                Tuple<Query, IDictionary<TKey, T>> tup;
-                if ((tup = dictOuter.CachedQueries.FirstOrDefault(cq => cq.Item1 == query)) != null)
-                {
-                    if (tup.Item2 != null)
-                    {
-                        TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> d) => 
-                            d.CachedQueries = RemoveOnce(d.CachedQueries, tup).ToArray());
-                        return queryFunc(MergeWithLocals(tup.Item2,
-                            dictOuter.Entities.Values.Where(query.Check)));
-                    }
-                    return queryFunc(dictOuter.Entities);
-                }
-
-                // we'll need to load entities...
-                Shield.SideEffect(null, () => {
-                    var qRes = Repository.RunQuery<T>(query);
-                    if (qRes == null)
-                        throw new ApplicationException(string.Format("Unable to load {0} query {1}", typeof(T).Name, query));
-                    ImportTransaction(() => TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> d) => {
-                        if (qRes.QueryOwned && d.CachedQueries.Any(cq => cq.Item1 == query))
-                            return;
-                        ImportInt(qRes.Owned, d.Entities);
-                        d.CachedQueries = qRes.QueryOwned ?
-                            d.CachedQueries.Concat(new[] { Tuple.Create(query, (IDictionary<TKey, T>)null) }).ToArray() :
-                            d.CachedQueries.Concat(new[] { Tuple.Create(query,
-                                MergeAndFilter(qRes.Result, d.Entities)) }).ToArray();
-                    }));
-                });
-                Shield.Rollback();
-                return default(TRes);
-            });
-        }
-
-        static IDictionary<TKey, T> MergeAndFilter<TKey, T>(IEnumerable<T> source, ShieldedDict<TKey, T> entities) where T : DistributedBase<TKey>
-        {
-            var res = new Dictionary<TKey, T>();
-            foreach (var entity in source)
+            public static void Import(Query query, QueryResult<T> qRes)
             {
-                T oldMerged;
-                if (res.TryGetValue(entity.Id, out oldMerged))
-                {
-                    Merge(entity, oldMerged);
-                    continue;
-                }
-
-                T oldTracked;
-                if (entities.TryGetValue(entity.Id, out oldTracked))
-                {
-                    Merge(entity, oldTracked);
-                    res.Add(entity.Id, oldTracked);
-                }
-                else
-                    res.Add(entity.Id, Map.ToShielded(entity));
+                ImportTransaction(() => Ref.Modify((ref TypeDict<TKey, T> d) => {
+                    ImportInt(qRes.Owned, d.Entities);
+                    if (!qRes.QueryOwned)
+                        d.CachedQueries = d.CachedQueries.Concat(new[] {
+                            Tuple.Create(query, MergeAndFilter(qRes.Result, d.Entities, query)) }).ToArray();
+                    else if (!d.OwnedQueries.Contains(query))
+                        d.OwnedQueries = d.OwnedQueries.Concat(new[] { query }).ToArray();
+                }));
             }
-            return res;
-        }
 
-        static IDictionary<TKey, T> MergeWithLocals<TKey, T>(IDictionary<TKey, T> res, IEnumerable<T> locals) where T : DistributedBase<TKey>
-        {
-            foreach (var item in locals)
-                res[item.Id] = item;
-            return res;
+            static ShieldedDict<TKey, T> MergeAndFilter(IEnumerable<T> source, ShieldedDict<TKey, T> entities, Query query)
+            {
+                var res = new ShieldedDict<TKey, T>();
+                foreach (var entity in source.Concat(entities.Values.Where(query.Check)))
+                {
+                    T oldMerged;
+                    if (res.TryGetValue(entity.Id, out oldMerged))
+                    {
+                        Merge(entity, oldMerged);
+                        continue;
+                    }
+
+                    T oldTracked;
+                    if (entities.TryGetValue(entity.Id, out oldTracked))
+                    {
+                        Merge(entity, oldTracked);
+                        res.Add(entity.Id, oldTracked);
+                    }
+                    else
+                        res.Add(entity.Id, Map.ToShielded(entity));
+                }
+                return res;
+            }
+
+            public static ShieldedDict<TKey, T> PickUp(Query query)
+            {
+                var oldDict = Ref.Value;
+                if (oldDict.OwnedQueries.Contains(query))
+                    return oldDict.Entities;
+                if (oldDict.CachedQueries.All(cq => cq.Item1 != query))
+                    return null;
+                ShieldedDict<TKey, T> res = null;
+                Ref.Modify((ref TypeDict<TKey, T> d) => {
+                    var tup = d.CachedQueries.First(cq => cq.Item1 == query);
+                    d.CachedQueries = RemoveOnce(d.CachedQueries, tup).ToArray();
+                    res = tup.Item2;
+                });
+                return res;
+            }
+
+            public static void UpdateCached(T entity)
+            {
+                var dict = Ref.Value;
+                var mapped = Map.ToShielded(entity);
+                foreach (var cache in dict.CachedQueries)
+                {
+                    if (cache.Item1.Check(entity))
+                        cache.Item2[entity.Id] = mapped;
+                    else
+                        cache.Item2.Remove(entity.Id);
+                }
+            }
+
+            public static void RemoveCached(T entity)
+            {
+                var dict = Ref.Value;
+                foreach (var cache in dict.CachedQueries)
+                    cache.Item2.Remove(entity.Id);
+            }
         }
 
         static IEnumerable<T> RemoveOnce<T>(IEnumerable<T> source, T item)
@@ -111,14 +116,36 @@ namespace ShieldedDb.Data
             }
         }
 
+        public static TRes Query<TKey, T, TRes>(QueryFunc<TKey, T, TRes> queryFunc, Query query) where T : DistributedBase<TKey>, new()
+        {
+            return Shield.InTransaction(() => {
+                if (query == null)
+                    return queryFunc(TypeDict<TKey, T>.Ref.Value.Entities);
+                var cached = TypeDict<TKey, T>.PickUp(query);
+                if (cached != null)
+                    return queryFunc(cached);
+
+                // we'll need to load entities...
+                Shield.SideEffect(null, () => {
+                    var qRes = Repository.RunQuery<T>(query);
+                    if (qRes == null)
+                        throw new ApplicationException(string.Format("Unable to load {0} query {1}", typeof(T).Name, query));
+                    TypeDict<TKey, T>.Import(query, qRes);
+                });
+                Shield.Rollback();
+                return default(TRes);
+            });
+        }
+
         public static T Add<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
             if (dict.Entities.ContainsKey(entity.Id))
                 throw new InvalidOperationException("Entity of the same type with same ID already known.");
             var res = Map.ToShielded(entity);
-            if (dict.CachedQueries.Any(cq => cq.Item2 == null && cq.Item1.Check(res)))
+            if (dict.OwnedQueries.Any(q => q.Check(res)))
                 dict.Entities.Add(entity.Id, res);
+            TypeDict<TKey, T>.UpdateCached(res);
             return res;
         }
 
@@ -135,28 +162,31 @@ namespace ShieldedDb.Data
         public static T Update<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
-            var owned = dict.CachedQueries.Any(cq => cq.Item2 == null && cq.Item1.Check(entity));
+            var owned = dict.OwnedQueries.Any(q => q.Check(entity));
             T old;
             if (!dict.Entities.TryGetValue(entity.Id, out old))
             {
                 if (owned)
                     throw new InvalidOperationException("Entity does not exist.");
-                return Map.ToShielded(entity);
+                var res = Map.ToShielded(entity);
+                TypeDict<TKey, T>.UpdateCached(res);
+                return res;
             }
             if (entity.Version < old.Version)
                 throw new ConcurrencyException();
             Map.Copy(old.GetType().BaseType, entity, old);
             if (!owned)
                 dict.Entities.Remove(entity.Id);
+            TypeDict<TKey, T>.UpdateCached(old);
             return old;
         }
 
-        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>
+        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
             T existing;
             if (!dict.Entities.TryGetValue(entity.Id, out existing) &&
-                dict.CachedQueries.Any(cq => cq.Item2 == null && cq.Item1.Check(entity)))
+                dict.OwnedQueries.Any(q => q.Check(entity)))
                 throw new KeyNotFoundException();
             if (existing != null)
             {
@@ -164,6 +194,7 @@ namespace ShieldedDb.Data
                     throw new ConcurrencyException();
                 dict.Entities.Remove(entity.Id);
             }
+            TypeDict<TKey, T>.RemoveCached(entity);
         }
 
         [ThreadStatic]
@@ -217,13 +248,14 @@ namespace ShieldedDb.Data
                 if (dict.TryGetValue(dto.Id, out old))
                     Merge(dto, old);
                 else
-                    dict[dto.Id] = Map.ToShielded(dto);
+                    dict[dto.Id] = old = Map.ToShielded(dto);
+                TypeDict<TKey, T>.UpdateCached(old);
             }
         }
 
         static void Merge(DistributedBase dto, DistributedBase old)
         {
-            if (dto.Version > old.Version)
+            if (dto != old && dto.Version > old.Version)
                 Map.Copy(old.GetType().BaseType, dto, old);
         }
 
@@ -247,11 +279,33 @@ namespace ShieldedDb.Data
                     T old;
                     if (d.Entities.TryGetValue(e.Id, out old))
                     {
-                        if (d.CachedQueries.Any(q => q.Item2 == null && q.Item1.Check(old)))
-                            d.CachedQueries = d.CachedQueries
-                                .Where(q => q.Item2 != null || !q.Item1.Check(old)).ToArray();
                         d.Entities.Remove(e.Id);
+                        var dropouts = d.OwnedQueries.Where(q => q.Check(old)).ToArray();
+                        d.OwnedQueries = d.OwnedQueries.Where(q => !q.Check(old)).ToArray();
+                        foreach (var lost in dropouts)
+                            ReloadTask<TKey, T>(lost);
                     }
+                    else
+                        old = e;
+                    if (d.CachedQueries.Any(cq => cq.Item1.Check(old)))
+                        d.CachedQueries = d.CachedQueries.Where(cq => !cq.Item1.Check(old)).ToArray();
+                }
+            });
+        }
+
+        static void ReloadTask<TKey, T>(Query lost) where T : DistributedBase<TKey>, new()
+        {
+            Task.Run(() => {
+                int tries = 0;
+                retry: try
+                {
+                    Repository.GetAll<TKey, T>(lost);
+                }
+                catch
+                {
+                    if (++tries < 10)
+                        goto retry;
+                    throw; // kills the app.
                 }
             });
         }
@@ -278,18 +332,25 @@ namespace ShieldedDb.Data
             T existing;
             if (!dict.Entities.TryGetValue(dto.Id, out existing))
             {
-                if (!dict.CachedQueries.Any(cq => cq.Item2 == null && cq.Item1.Check(dto)))
+                if (!dict.OwnedQueries.Any(q => q.Check(dto)))
+                {
+                    TypeDict<TKey, T>.UpdateCached(dto);
                     return true; // not interested
+                }
                 
                 if (opType != DataOpType.Insert)
                     return false;
-                dict.Entities[dto.Id] = Map.ToShielded(dto);
+                var entity = dict.Entities[dto.Id] = Map.ToShielded(dto);
+                TypeDict<TKey, T>.UpdateCached(entity);
                 return true;
             }
             if (opType == DataOpType.Insert || dto.Version <= existing.Version)
                 return false;
             if (opType == DataOpType.Delete)
+            {
                 dict.Entities.Remove(dto.Id);
+                TypeDict<TKey, T>.RemoveCached(dto);
+            }
             else
                 Merge(dto, existing);
             return true;
