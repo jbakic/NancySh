@@ -5,6 +5,7 @@ using Nancy;
 using ShieldedDb.Data;
 using System.Configuration;
 using Npgsql;
+using ShieldedDb.Models;
 
 namespace nancySh
 {
@@ -20,6 +21,10 @@ namespace nancySh
             var id = int.Parse(args[0]);
             var config = ServerConfig.Load("ServerConfig.xml");
             var server = config.Servers.First(s => s.Id == id);
+
+            // HACK: needed on MS.NET to load the Models assembly before the Repository goes
+            // searching for known types. that whole thing needs to be improved, ofc.
+            var hack = new Test();
 
             Console.WriteLine("Hello World @ {0} -- Press Enter to quit...", server.BaseUrl);
             StaticConfiguration.DisableErrorTraces = false;

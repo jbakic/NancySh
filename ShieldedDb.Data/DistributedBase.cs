@@ -10,7 +10,7 @@ namespace ShieldedDb.Data
         /// <summary>
         /// May never be null.
         /// </summary>
-        public virtual object IdValue { get; }
+        public abstract object IdValue { get; }
         public virtual int Version { get; set; }
 
         static IEnumerable<Type> KnownTypes()
