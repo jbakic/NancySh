@@ -52,21 +52,25 @@ namespace ShieldedDb.Data
 
         static Repository()
         {
-            var iDist = typeof(DistributedBase);
-            var distBase = typeof(DistributedBase<>);
-            var types = AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(asm =>
-                    asm.GetTypes().Where(t =>
-                        t.IsClass && t != distBase && t.IsSubclassOf(iDist)))
-                .ToArray();
-            Debug.WriteLine("Preparing {0} types.", types.Length);
-            Factory.PrepareTypes(types);
-            KnownTypes = types;
-
+            DetectEntityTypes();
             Shield.WhenCommitting<DistributedBase>(ds => {
                 if (_ctx == null && !_externTransaction && !EntityDictionary.IsImporting)
                     throw new InvalidOperationException("Distributables can only be changed in repo transactions.");
             });
+        }
+
+        public static void DetectEntityTypes(IEnumerable<Assembly> assemblies = null)
+        {
+            var iDist = typeof(DistributedBase);
+            var distBase = typeof(DistributedBase<>);
+            var types = (assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
+                .SelectMany(asm =>
+                    asm.GetTypes().Where(t =>
+                        t.IsClass && t != distBase && t.IsSubclassOf(iDist) && !Factory.IsProxy(t)))
+                .ToArray();
+            Debug.WriteLine("Preparing {0} types.", types.Length);
+            Factory.PrepareTypes(types);
+            KnownTypes = types;
         }
 
         static void DetectUpdates(CommitContinuation cont)

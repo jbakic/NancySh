@@ -22,16 +22,14 @@ namespace nancySh
             var config = ServerConfig.Load("ServerConfig.xml");
             var server = config.Servers.First(s => s.Id == id);
 
-            // HACK: needed on MS.NET to load the Models assembly before the Repository goes
-            // searching for known types. that whole thing needs to be improved, ofc.
-            var hack = new Test();
-
-            Console.WriteLine("Hello World @ {0} -- Press Enter to quit...", server.BaseUrl);
-            StaticConfiguration.DisableErrorTraces = false;
+            Repository.DetectEntityTypes(new[] { typeof(Test).Assembly });
             DTModule.InitBackend(config, id);
+
+            StaticConfiguration.DisableErrorTraces = false;
             using (var host = new NancyHost(new Uri(server.BaseUrl), new Application()))
             {
                 host.Start();
+                Console.WriteLine("Hello World @ {0} -- Press Enter to quit...", server.BaseUrl);
                 Console.ReadLine();
             }
         }
