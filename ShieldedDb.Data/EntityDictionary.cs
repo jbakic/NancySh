@@ -282,8 +282,10 @@ namespace ShieldedDb.Data
                         d.Entities.Remove(e.Id);
                         var dropouts = d.OwnedQueries.Where(q => q.Check(old)).ToArray();
                         d.OwnedQueries = d.OwnedQueries.Where(q => !q.Check(old)).ToArray();
-                        foreach (var lost in dropouts)
-                            ReloadTask<TKey, T>(lost);
+                        Shield.SideEffect(() => {
+                            foreach (var lost in dropouts)
+                                ReloadTask<TKey, T>(lost);
+                        });
                     }
                     else
                         old = e;
