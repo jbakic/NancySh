@@ -143,6 +143,8 @@ namespace ShieldedDb.Data
                     act();
                 }))
                 {
+                    if (continuation.Completed)
+                        return continuation.Committed;
                     DetectUpdates(continuation);
                     var distro = RunDistro(continuation);
                     if (!distro.Wait(TransactionTimeout))
