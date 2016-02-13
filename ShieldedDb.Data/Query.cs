@@ -11,7 +11,8 @@ namespace ShieldedDb.Data
     {
         public static readonly QueryAll All = new QueryAll();
 
-        private static IEnumerable<Type> _knownTypes;
+        static object _knownTypesLock = new object();
+        static IEnumerable<Type> _knownTypes;
 
         static Query()
         {
@@ -22,12 +23,15 @@ namespace ShieldedDb.Data
         {
             var qType = typeof(Query);
             var byIdType = typeof(QueryById<>);
-            _knownTypes = (assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
-                .SelectMany(asm =>
-                    asm.GetTypes().Where(t =>
-                        t.IsClass && t.IsSubclassOf(qType) && t != byIdType))
-                .Concat(IdTypeContainer.GetTypes().Select(idt => byIdType.MakeGenericType(idt)))
-                .ToArray();
+            lock (_knownTypesLock)
+                _knownTypes =
+                    (_knownTypes ?? IdTypeContainer.GetTypes().Select(idt => byIdType.MakeGenericType(idt)))
+                    .Concat((assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
+                        .SelectMany(asm =>
+                            asm.GetTypes().Where(t =>
+                                t.IsClass && t.IsSubclassOf(qType) && t != byIdType)))
+                    .Distinct()
+                    .ToArray();
         }
 
         public static IEnumerable<Type> GetKnownTypes()
