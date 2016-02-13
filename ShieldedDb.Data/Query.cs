@@ -45,8 +45,7 @@ namespace ShieldedDb.Data
 
         public override bool Equals(object obj)
         {
-            var q = obj as Query;
-            return q != null && Equals(q);
+            return Equals(obj as Query);
         }
 
         public static bool operator==(Query a, Query b)
