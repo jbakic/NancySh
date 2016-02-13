@@ -81,6 +81,11 @@ namespace ShieldedDb.Data
         {
             return -1;
         }
+
+        public override string ToString()
+        {
+            return "QueryAll";
+        }
     }
 
     static class IdTypeContainer
@@ -132,6 +137,11 @@ namespace ShieldedDb.Data
                 hash = hash * 23 + Id.GetHashCode();
                 return hash;
             }
+        }
+
+        public override string ToString()
+        {
+            return string.Format("QueryById<{0}>({1})", typeof(T), Id);
         }
     }
 }

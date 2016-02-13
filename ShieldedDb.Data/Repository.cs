@@ -48,6 +48,7 @@ namespace ShieldedDb.Data
 
         public static int TransactionTimeout = 5000;
 
+        static object _knownTypesLock = new object();
         public static IEnumerable<Type> KnownTypes
         {
             get;
@@ -67,14 +68,19 @@ namespace ShieldedDb.Data
         {
             var iDist = typeof(DistributedBase);
             var distBase = typeof(DistributedBase<>);
-            var types = (assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
-                .SelectMany(asm =>
-                    asm.GetTypes().Where(t =>
-                        t.IsClass && t != distBase && t.IsSubclassOf(iDist) && !Factory.IsProxy(t)))
-                .ToArray();
+            Type[] types;
+            lock (_knownTypesLock)
+            {
+                types = (KnownTypes ?? Enumerable.Empty<Type>())
+                    .Concat((assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
+                        .SelectMany(asm => asm.GetTypes().Where(t =>
+                            t.IsClass && t != distBase && t.IsSubclassOf(iDist) && !Factory.IsProxy(t))))
+                    .Distinct()
+                    .ToArray();
+                KnownTypes = types;
+            }
             Debug.WriteLine("Preparing {0} types.", types.Length);
             Factory.PrepareTypes(types);
-            KnownTypes = types;
         }
 
         static void DetectUpdates(CommitContinuation cont)
