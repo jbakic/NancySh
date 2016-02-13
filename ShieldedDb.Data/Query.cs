@@ -2,29 +2,37 @@
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace ShieldedDb.Data
 {
-    [KnownType("KnownTypes")]
+    [KnownType("GetKnownTypes")]
     public abstract class Query : IEquatable<Query>
     {
         public static readonly QueryAll All = new QueryAll();
 
-        private static Dictionary<string, Type> _knownTypes;
+        private static IEnumerable<Type> _knownTypes;
 
         static Query()
         {
-            var qType = typeof(Query);
-            _knownTypes = AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(asm =>
-                    asm.GetTypes().Where(t =>
-                        t.IsClass && t.IsSubclassOf(qType)))
-                .ToDictionary(t => t.FullName);
+            DetectQueryTypes();
         }
 
-        public static IEnumerable<Type> KnownTypes()
+        public static void DetectQueryTypes(IEnumerable<Assembly> assemblies = null)
         {
-            return _knownTypes.Values;
+            var qType = typeof(Query);
+            var byIdType = typeof(QueryById<>);
+            _knownTypes = (assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
+                .SelectMany(asm =>
+                    asm.GetTypes().Where(t =>
+                        t.IsClass && t.IsSubclassOf(qType) && t != byIdType))
+                .Concat(IdTypeContainer.GetTypes().Select(idt => byIdType.MakeGenericType(idt)))
+                .ToArray();
+        }
+
+        public static IEnumerable<Type> GetKnownTypes()
+        {
+            return _knownTypes;
         }
 
         public abstract bool Check(DistributedBase entity);
@@ -39,6 +47,18 @@ namespace ShieldedDb.Data
         {
             var q = obj as Query;
             return q != null && Equals(q);
+        }
+
+        public static bool operator==(Query a, Query b)
+        {
+            if (object.ReferenceEquals(a, null))
+                return object.ReferenceEquals(b, null);
+            return a.Equals(b);
+        }
+
+        public static bool operator!=(Query a, Query b)
+        {
+            return !(a == b);
         }
     }
 
@@ -60,23 +80,55 @@ namespace ShieldedDb.Data
         }
     }
 
-    public class QueryById : Query
+    static class IdTypeContainer
     {
-        
-        
+        static IEnumerable<Type> _types;
+
+        public static IEnumerable<Type> GetTypes()
+        {
+            return _types ?? (_types = Repository.KnownTypes
+                .Select(qt => qt.GetProperty("Id"))
+                .Where(prop => prop != null)
+                .Select(prop => prop.PropertyType)
+                .Distinct()
+                .ToArray());
+        }
+    }
+
+    public sealed class QueryById<T> : Query
+    {
+        public T Id;
+
+        public QueryById() { }
+
+        public QueryById(T id)
+        {
+            Id = id;
+        }
+
+        static EqualityComparer<T> _comp = EqualityComparer<T>.Default;
+
         public override bool Check(DistributedBase entity)
         {
-            throw new NotImplementedException();
+            var based = entity as DistributedBase<T>;
+            return based != null && _comp.Equals(based.Id, Id);
         }
 
         public override bool Equals(Query other)
         {
-            throw new NotImplementedException();
+            var otherAsId = other as QueryById<T>;
+            return otherAsId != null && _comp.Equals(otherAsId.Id, Id);
         }
 
         public override int GetHashCode()
         {
-            return base.GetHashCode();
+            unchecked
+            {
+                var hash = 17;
+                hash = hash * 23 + GetType().GetHashCode();
+                hash = hash * 23 + Id.GetHashCode();
+                return hash;
+            }
         }
     }
 }

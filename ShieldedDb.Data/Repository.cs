@@ -48,7 +48,11 @@ namespace ShieldedDb.Data
 
         public static int TransactionTimeout = 5000;
 
-        public static IEnumerable<Type> KnownTypes;
+        public static IEnumerable<Type> KnownTypes
+        {
+            get;
+            private set;
+        }
 
         static Repository()
         {
@@ -179,21 +183,34 @@ namespace ShieldedDb.Data
             return _backs.QueryParallelSafe(b => b.Query<T>(query));
         }
 
+        static IEnumerable<T> QueryCheck<TKey, T>(IDictionary<TKey, T> dict, Query query) where T : DistributedBase<TKey>, new()
+        {
+            var idQuery = query as QueryById<TKey>;
+            if (idQuery != null)
+            {
+                T res;
+                if (dict.TryGetValue(idQuery.Id, out res))
+                    return new[] { res };
+                return Enumerable.Empty<T>();
+            }
+            return dict.Values.Where(query.Check);
+        }
+
         public static IEnumerable<T> GetAll<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check), query);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => QueryCheck(dict, query), query);
         }
 
         public static IEnumerable<T> GetLocal<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => dict.Values.Where(query.Check), null);
+            return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => QueryCheck(dict, query), null);
         }
 
         public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
         {
             return
                 EntityDictionary.Query<TKey, T, T>(dict => dict.ContainsKey(id) ? dict[id] : null, null) ??
-                EntityDictionary.Query<TKey, T, T>(dict => dict[id], Query.All);
+                EntityDictionary.Query<TKey, T, T>(dict => dict[id], new QueryById<TKey>(id));
         }
 
         static DataOpType? Already(DistributedBase entity)

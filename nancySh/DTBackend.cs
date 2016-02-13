@@ -130,8 +130,9 @@ namespace nancySh
                             ((HttpWebResponse)taskResp.Result).StatusCode != HttpStatusCode.OK ? new BackendResult(ops) :
                             new BackendResult(true));
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Console.WriteLine("Prepare {0} - {1}", transactionId, ex.Message);
                         return Task.FromResult(new BackendResult(false));
                     }
                 }));
@@ -150,8 +151,9 @@ namespace nancySh
                         req.ContentLength = 0;
                         return GetResponseAsync(req);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Console.WriteLine("Commit {0} - {1}", transactionId, ex.Message);
                         return Task.FromResult(false);
                     }
                 })).ContinueWith(t => {
@@ -173,7 +175,10 @@ namespace nancySh
                     req.ContentLength = 0;
                     req.BeginGetResponse(ar => { }, null);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Abort {0} - {1}", transactionId, ex.Message);
+                }
             }
         }
 
@@ -205,8 +210,9 @@ namespace nancySh
                     var l = (DataList)listSerializer.ReadObject(resp.GetResponseStream());
                     return new QueryResult<T>(owned, l.Entities != null ? l.Entities.Cast<T>() : null);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Console.WriteLine("Query - {0}", ex.Message);
                     return new QueryResult<T>(owned);
                 }
             }) ?? new QueryResult<T>(owned); // if all have empty, empty is all.

@@ -14,6 +14,12 @@ namespace nancySh
         {
             Get["/"] = parameters => IndexView();
 
+            Get["/id/{Id:int}"] = parameters => {
+                var entity = Repository.InTransaction(() =>
+                    Test.Repo.Find(parameters.Id));
+                return ById(entity);
+            };
+
             Post["/delete/{Id:int}/{Version:int}"] = parameters => {
 //                this.ValidateCsrfToken();
                 Repository.InTransaction(() =>
@@ -47,6 +53,12 @@ namespace nancySh
             this.CreateNewCsrfToken();
             return View["index", Repository.InTransaction(() =>
                 Test.Repo.GetAll().Select(Map.NonShieldedClone).OrderBy(t => t.Id).ToArray())];
+        }
+
+        private object ById(Test test)
+        {
+            this.CreateNewCsrfToken();
+            return View["index", new[] { Map.NonShieldedClone(test) }];
         }
     }
 }
