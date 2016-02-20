@@ -28,14 +28,19 @@ namespace ShieldedDb.Data
             var transId = Guid.NewGuid();
             return Prepare(transId, ops)
                 .ContinueWith((Task<BackendResult> prepareTask) => {
-                    if (prepareTask.Exception != null || !prepareTask.Result.Ok)
+                    if (prepareTask.Exception != null)
+                    {
+                        Abort(transId, ops);
+                        throw new TwoPCFailedException(false, prepareTask.Exception);
+                    }
+                    if (!prepareTask.Result.Ok)
                     {
                         Abort(transId, ops);
                         return prepareTask.Result;
                     }
                     return Commit(transId, ops).ContinueWith(commitTask => {
                         if (commitTask.Exception != null)
-                            throw commitTask.Exception;
+                            throw new TwoPCFailedException(true, commitTask.Exception);
                         return new BackendResult(true);
                     }).Result;
                 });
