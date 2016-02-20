@@ -26,7 +26,8 @@ namespace ShieldedDb.Data
             lock (_knownTypesLock)
                 _knownTypes =
                     (_knownTypes ?? IdTypeContainer.GetTypes().Select(idt => byIdType.MakeGenericType(idt)))
-                    .Concat((assemblies ?? AppDomain.CurrentDomain.GetAssemblies())
+                    .Concat((assemblies ?? Enumerable.Empty<Assembly>())
+                        .Concat(AppDomain.CurrentDomain.GetAssemblies())
                         .SelectMany(asm =>
                             asm.GetTypes().Where(t =>
                                 t.IsClass && t.IsSubclassOf(qType) && t != byIdType)))
