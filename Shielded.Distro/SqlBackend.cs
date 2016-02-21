@@ -64,7 +64,7 @@ namespace Shielded.Distro
             var name = typeof(T).Name;
             Debug.WriteLine("Loading all {0}", (object)name);
             using (var conn = _connFactory())
-                return new QueryResult<T>(true,
+                return new QueryResult<T>(false,
                     conn.Query<T>(string.Format("select * from {0}", name))
                     .Where(query.Check)
                     .ToArray());

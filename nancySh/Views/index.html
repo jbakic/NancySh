@@ -1,0 +1,76 @@
+﻿<html>
+<head>
+    <title>Portraits</title>
+    <link rel="stylesheet" type="text/css" href="/Content/bootstrap.min.css"/>
+</head>
+<body>
+
+<div class="header col-xs-12">
+    <h1><a onclick="reload();" href="#">Hello!</a></h1>
+</div>
+
+<form method="post" action="/new">
+    <input type="submit" value="New item"/>
+</form>
+
+<div id="list" class="col-lg-4">
+</div>
+
+<script src="/js/jquery-2.2.0.min.js"></script>
+<script src="/js/bootstrap.min.js"></script>
+<script src="/js/tmpl.js"></script>
+
+<!--
+                <form id="form<%=tests[i].id%>" method="post" action="/update">
+                    <input type="hidden" name="Id" value="<%=tests[i].id%>"/>
+                    <input type="hidden" name="Version" value="<%=tests[i].version%>"/>
+                    <input type="text" name="Val" value="<%=tests[i].val%>"/>
+                    <input type="submit" value="Edit"/>
+                </form>
+
+-->
+
+<script type="text/html" id="list_tmpl">
+    <table class="table">
+    <% for ( var i = 0; i < tests.length; i++ ) { %>
+        <tr>
+            <td>
+                <%=tests[i].id%>
+            </td>
+            <td>
+                <form id="form<%=tests[i].id%>">
+                    <input id="val<%=tests[i].id%>" type="text" value="<%=tests[i].val%>"/>
+                    <input type="button" value="Edit"
+                        onclick="update(<%=tests[i].id%>,<%=tests[i].version%>)"/>
+                </form>
+            </td>
+            <td>
+                <form method="post" action="/delete/<%=tests[i].id%>/<%=tests[i].version%>">
+                    <input type="submit" value="Delete"/>
+                </form>
+            </td>
+        </tr>
+    <% } %>
+    </table>
+</script>
+
+
+<script>
+function reload() {
+    $.get("list", function (data) {
+        var results = document.getElementById("list");
+        results.innerHTML = tmpl("list_tmpl", { tests: data });
+    });
+}
+
+reload();
+
+function update(id, version)
+{
+    $.post("update", { Id: id, Version: version, Val: $("#val" + id).val() }, reload);
+}
+
+</script>
+
+</body>
+</html>

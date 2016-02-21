@@ -15,13 +15,13 @@ namespace nancySh
 {
     public class DTModule : NancyModule
     {
-        static DTBackend _backend;
+        internal static DTBackend Backend;
         static Dictionary<Type, MethodInfo> _getters = new Dictionary<Type, MethodInfo>();
 
         public static void InitBackend(ServerConfig config, int myId)
         {
-            _backend = new DTBackend(config, config.Servers.Single(s => s.Id == myId));
-            Repository.AddBackend(_backend);
+            Backend = new DTBackend(config, config.Servers.Single(s => s.Id == myId));
+            Repository.AddBackend(Backend);
             var ownershipQ = new OwnershipQuery { ServerId = myId, ServerCount = config.Servers.Length };
             foreach (var typ in Repository.KnownTypes)
             {
@@ -61,17 +61,17 @@ namespace nancySh
             Post["/prepare"] = _ => {
                 var serializer = new DataContractJsonSerializer(typeof(DTransaction));
                 var trans = (DTransaction)serializer.ReadObject(Request.Body);
-                return _backend.PrepareExt(trans) ? Nancy.HttpStatusCode.OK : Nancy.HttpStatusCode.BadRequest;
+                return Backend.PrepareExt(trans) ? Nancy.HttpStatusCode.OK : Nancy.HttpStatusCode.BadRequest;
             };
 
             Post["/commit/{id:guid}"] = parameters => {
                 Guid transId = parameters.id;
-                return _backend.CommitExt(transId) ? Nancy.HttpStatusCode.OK : Nancy.HttpStatusCode.BadRequest;
+                return Backend.CommitExt(transId) ? Nancy.HttpStatusCode.OK : Nancy.HttpStatusCode.BadRequest;
             };
 
             Post["/abort/{id:guid}"] = parameters => {
                 Guid transId = parameters.id;
-                _backend.AbortExt(transId);
+                Backend.AbortExt(transId);
                 return Nancy.HttpStatusCode.OK;
             };
         }

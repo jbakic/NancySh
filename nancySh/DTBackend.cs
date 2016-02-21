@@ -65,8 +65,9 @@ namespace nancySh
 
     public class DTBackend : TwoPCBackend
     {
-        private ServerConfig _config;
-        private int _myId;
+        private readonly ServerConfig _config;
+        private readonly int _myId;
+        private readonly OwnershipQuery _ownership;
 
         public DTBackend(ServerConfig config, Server myServer)
             : base(myServer.BackupDbConnString == null ? null :
@@ -74,12 +75,13 @@ namespace nancySh
         {
             _config = config;
             _myId = myServer.Id;
+            _ownership = new OwnershipQuery { ServerId = _myId, ServerCount = _config.Servers.Length };
         }
 
         IEnumerable<Server> Owners(IEnumerable<DataOp> ops)
         {
             return _config.Servers.Where(s => s.Id != _myId &&
-                ops.Any(op => OwnershipQuery.Check(s.Id, _config.Servers.Length, op.Entity)));
+                ops.Any(op => _ownership.Check(op.Entity)));
         }
 
         static Task<bool> GetResponseAsync(WebRequest req)
@@ -215,7 +217,7 @@ namespace nancySh
                 catch (Exception ex)
                 {
                     Console.WriteLine("Query - {0}", ex.Message);
-                    return new QueryResult<T>(owned);
+                    return new QueryResult<T>(false);
                 }
             }) ?? new QueryResult<T>(owned); // if all have empty, empty is all.
             Console.WriteLine("Loaded {0}", res.Result.Count());
@@ -243,6 +245,11 @@ namespace nancySh
             Console.WriteLine("Aborting external {0}", transId);
             MsgAbort(transId);
             Console.WriteLine("Done {0}", transId);
+        }
+
+        public void CheckStatus<TKey, T>() where T : DistributedBase<TKey>, new()
+        {
+            Repository.GetAll<TKey, T>(_ownership);
         }
     }
 }
