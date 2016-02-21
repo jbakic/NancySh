@@ -22,9 +22,7 @@ namespace nancySh
             var config = ServerConfig.Load("ServerConfig.xml");
             var server = config.Servers.First(s => s.Id == id);
 
-            Repository.DetectEntityTypes(new[] { typeof(Test).Assembly });
             DTModule.InitBackend(config, id);
-
             StaticConfiguration.DisableErrorTraces = false;
             using (var host = new NancyHost(new Uri(server.BaseUrl), new Application()))
             {
