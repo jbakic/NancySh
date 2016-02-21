@@ -5,7 +5,7 @@ using System.Linq;
 using Shielded;
 using Shielded.ProxyGen;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     /// <summary>
     /// Maps from and to shielded objects.

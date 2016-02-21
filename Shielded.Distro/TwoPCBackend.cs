@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Shielded;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public class TwoPCFailedException : Exception
     {

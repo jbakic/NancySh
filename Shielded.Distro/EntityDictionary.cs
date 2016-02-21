@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public delegate TRes QueryFunc<TKey, T, TRes>(IDictionary<TKey, T> dict) where T : DistributedBase<TKey>, new();
 

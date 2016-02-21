@@ -10,7 +10,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Threading;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     /// <summary>
     /// It's annoying that one type parameter is not enough, and we always

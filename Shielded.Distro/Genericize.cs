@@ -2,7 +2,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public class Genericize
     {

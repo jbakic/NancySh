@@ -3,7 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public interface IBackend
     {

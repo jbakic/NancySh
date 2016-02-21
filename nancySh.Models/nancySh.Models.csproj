@@ -5,8 +5,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{C42216D4-BFF9-4B5A-8CA2-B021E560A243}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>ShieldedDb2.Models</RootNamespace>
-    <AssemblyName>ShieldedDb2.Models</AssemblyName>
+    <RootNamespace>ShieldedDb.Models</RootNamespace>
+    <AssemblyName>ShieldedDb.Models</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -29,11 +29,22 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="Shielded">
+      <HintPath>..\packages\Shielded.4.2.3\lib\net40\Shielded.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Test.cs" />
-    <Compile Include="IEntity.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <ProjectReference Include="..\Shielded.Distro\Shielded.Distro.csproj">
+      <Project>{A893D391-2123-44FE-8862-F4563A0C3930}</Project>
+      <Name>Shielded.Distro</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>

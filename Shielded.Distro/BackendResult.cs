@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public class BackendResult
     {

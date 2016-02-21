@@ -110,13 +110,13 @@
     <Folder Include="Views\" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ShieldedDb.Data\ShieldedDb.Data.csproj">
-      <Project>{A893D391-2123-44FE-8862-F4563A0C3930}</Project>
-      <Name>ShieldedDb.Data</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ShieldedDb.Models\ShieldedDb.Models.csproj">
+    <ProjectReference Include="..\nancySh.Models\nancySh.Models.csproj">
       <Project>{C42216D4-BFF9-4B5A-8CA2-B021E560A243}</Project>
-      <Name>ShieldedDb.Models</Name>
+      <Name>nancySh.Models</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Shielded.Distro\Shielded.Distro.csproj">
+      <Project>{A893D391-2123-44FE-8862-F4563A0C3930}</Project>
+      <Name>Shielded.Distro</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

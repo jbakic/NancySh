@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public enum DataOpType
     {

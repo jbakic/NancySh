@@ -4,7 +4,7 @@ using System.Runtime.Serialization;
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     [KnownType("GetKnownTypes")]
     public abstract class Query : IEquatable<Query>

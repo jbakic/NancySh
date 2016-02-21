@@ -2,10 +2,10 @@
 using System.Linq;
 using Nancy.Hosting.Self;
 using Nancy;
-using ShieldedDb.Data;
+using Shielded.Distro;
 using System.Configuration;
 using Npgsql;
-using ShieldedDb.Models;
+using nancySh.Models;
 
 namespace nancySh
 {

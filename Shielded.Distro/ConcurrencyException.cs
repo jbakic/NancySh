@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     public class ConcurrencyException : Exception
     {

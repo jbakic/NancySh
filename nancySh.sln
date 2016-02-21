@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nancySh", "nancySh\nancySh.csproj", "{E583A382-62B2-4AF3-A336-0A72476E7B82}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedDb.Models", "ShieldedDb.Models\ShieldedDb.Models.csproj", "{C42216D4-BFF9-4B5A-8CA2-B021E560A243}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nancySh.Models", "nancySh.Models\nancySh.Models.csproj", "{C42216D4-BFF9-4B5A-8CA2-B021E560A243}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedDb.Data", "ShieldedDb.Data\ShieldedDb.Data.csproj", "{A893D391-2123-44FE-8862-F4563A0C3930}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shielded.Distro", "Shielded.Distro\Shielded.Distro.csproj", "{A893D391-2123-44FE-8862-F4563A0C3930}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Sql", "Sql", "{DCE0FD90-A265-43C8-BF7C-43BA4B8D9884}"
 	ProjectSection(SolutionItems) = preProject

@@ -2,8 +2,8 @@
 using System.Linq;
 using Nancy;
 using Nancy.Security;
-using ShieldedDb.Data;
-using ShieldedDb.Models;
+using Shielded.Distro;
+using nancySh.Models;
 using Nancy.ModelBinding;
 
 namespace nancySh

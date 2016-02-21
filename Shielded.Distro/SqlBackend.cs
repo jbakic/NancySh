@@ -9,7 +9,7 @@ using Dapper;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     internal delegate void SqlOp(IDbConnection conn);
 

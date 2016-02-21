@@ -2,7 +2,7 @@
 using System.Runtime.Serialization;
 using System.Collections.Generic;
 
-namespace ShieldedDb.Data
+namespace Shielded.Distro
 {
     [KnownType("KnownTypes")]
     public abstract class DistributedBase

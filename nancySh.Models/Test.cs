@@ -1,7 +1,7 @@
 ﻿using System;
-using ShieldedDb.Data;
+using Shielded.Distro;
 
-namespace ShieldedDb.Models
+namespace nancySh.Models
 {
     public class Test : DistributedBase<int>
     {

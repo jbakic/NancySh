@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using ShieldedDb.Data;
+using Shielded.Distro;
 using System.Runtime.Serialization.Json;
 
 namespace nancySh
