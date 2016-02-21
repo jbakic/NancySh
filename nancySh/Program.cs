@@ -22,8 +22,8 @@ namespace nancySh
             var config = ServerConfig.Load("ServerConfig.xml");
             var server = config.Servers.First(s => s.Id == id);
 
-            DTModule.InitBackend(config, id);
             StaticConfiguration.DisableErrorTraces = false;
+            DTModule.InitBackend(config, id);
             using (var host = new NancyHost(new Uri(server.BaseUrl), new Application()))
             {
                 host.Start();
