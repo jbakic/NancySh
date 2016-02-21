@@ -14,26 +14,20 @@ namespace nancySh
         {
             Get["/"] = parameters => IndexView();
 
-            Get["/id/{Id:int}"] = parameters => {
-                var entity = Repository.InTransaction(() =>
-                    Test.Repo.Find(parameters.Id));
-                return ById(entity);
-            };
+            Get["/id/{Id:int}"] = parameters => ById(parameters.Id);
 
             Post["/delete/{Id:int}/{Version:int}"] = parameters => {
 //                this.ValidateCsrfToken();
-                Repository.InTransaction(() =>
-                    Test.Repo.Remove(new Test {
-                        Id = parameters.Id,
-                        Version = parameters.Version,
-                    }));
+                Test.Repo.Remove(new Test {
+                    Id = parameters.Id,
+                    Version = parameters.Version,
+                });
                 return Response.AsRedirect("/");
             };
 
             Post["/update"] = parameters => {
 //                this.ValidateCsrfToken();
-                var data = this.Bind<Test>();
-                Repository.InTransaction(() => Test.Repo.Update(data));
+                Test.Repo.Update(this.Bind<Test>());
                 return Response.AsRedirect("/");
             };
 
@@ -55,10 +49,11 @@ namespace nancySh
                 Test.Repo.GetAll().Select(Map.NonShieldedClone).OrderBy(t => t.Id).ToArray())];
         }
 
-        private object ById(Test test)
+        private object ById(int id)
         {
             this.CreateNewCsrfToken();
-            return View["index", new[] { Map.NonShieldedClone(test) }];
+            return View["index", new[] { Repository.InTransaction(() =>
+                Map.NonShieldedClone(Test.Repo.Find(id))) }];
         }
     }
 }
