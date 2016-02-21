@@ -20,7 +20,7 @@ namespace nancySh
 
         public static void InitBackend(ServerConfig config, int myId)
         {
-            _backend = new DTBackend(config, myId);
+            _backend = new DTBackend(config, config.Servers.Single(s => s.Id == myId));
             Repository.AddBackend(_backend);
             var ownershipQ = new OwnershipQuery { ServerId = myId, ServerCount = config.Servers.Length };
             foreach (var typ in Repository.KnownTypes)

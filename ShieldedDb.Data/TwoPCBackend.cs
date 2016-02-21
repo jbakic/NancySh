@@ -23,6 +23,13 @@ namespace ShieldedDb.Data
     /// </summary>
     public abstract class TwoPCBackend : IBackend
     {
+        protected readonly IBackend Backup;
+
+        protected TwoPCBackend(IBackend backup = null)
+        {
+            Backup = backup;
+        }
+
         public Task<BackendResult> Run(IEnumerable<DataOp> ops)
         {
             var transId = Guid.NewGuid();
@@ -41,6 +48,8 @@ namespace ShieldedDb.Data
                     return Commit(transId, ops).ContinueWith(commitTask => {
                         if (commitTask.Exception != null)
                             throw new TwoPCFailedException(true, commitTask.Exception);
+                        if (Backup != null)
+                            return Backup.Run(ops).Result;
                         return new BackendResult(true);
                     }).Result;
                 });
@@ -63,7 +72,15 @@ namespace ShieldedDb.Data
         /// </summary>
         protected abstract void Abort(Guid transactionId, IEnumerable<DataOp> ops);
 
-        public abstract QueryResult<T> Query<T>(Query query) where T : DistributedBase, new();
+        public QueryResult<T> Query<T>(Query query) where T : DistributedBase, new()
+        {
+            if (Backup != null)
+                return new Func<Query, QueryResult<T>>[] { q => Backup.Query<T>(q), q => DoQuery<T>(q) }
+                    .QueryParallelSafe(f => f(query));
+            return DoQuery<T>(query);
+        }
+
+        protected abstract QueryResult<T> DoQuery<T>(Query query) where T : DistributedBase, new();
 
         private readonly ShieldedDict<Guid, CommitContinuation> _transactions = new ShieldedDict<Guid, CommitContinuation>();
 
@@ -74,7 +91,15 @@ namespace ShieldedDb.Data
         protected bool MsgPrepare(Guid transactionId, IEnumerable<DataOp> ops)
         {
             var cont = Repository.PrepareExtern(ops);
-            if (cont != null) Shield.InTransaction(() => { _transactions[transactionId] = cont; });
+            if (cont != null)
+            {
+                if (Backup != null)
+                    cont.InContext(() => Shield.SideEffect(() =>
+                        Backup.Run(ops).Wait()));
+                Shield.InTransaction(() => {
+                    _transactions[transactionId] = cont;
+                });
+            }
             return cont != null;
         }
 

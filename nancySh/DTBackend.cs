@@ -68,10 +68,12 @@ namespace nancySh
         private ServerConfig _config;
         private int _myId;
 
-        public DTBackend(ServerConfig config, int myId)
+        public DTBackend(ServerConfig config, Server myServer)
+            : base(myServer.BackupDbConnString == null ? null :
+                new SqlBackend(() => new Npgsql.NpgsqlConnection(myServer.BackupDbConnString)))
         {
             _config = config;
-            _myId = myId;
+            _myId = myServer.Id;
         }
 
         IEnumerable<Server> Owners(IEnumerable<DataOp> ops)
@@ -188,7 +190,7 @@ namespace nancySh
             return ownQ != null && ownQ.ServerId == _myId;
         }
 
-        public override QueryResult<T> Query<T>(Query query)
+        protected override QueryResult<T> DoQuery<T>(Query query)
         {
             var name = typeof(T).Name;
             Console.WriteLine("Running query {0}/{1}", name, query);

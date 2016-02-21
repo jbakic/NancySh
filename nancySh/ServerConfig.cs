@@ -21,6 +21,8 @@ namespace nancySh
         public int Id;
         [XmlAttribute]
         public string BaseUrl;
+
+        public string BackupDbConnString;
     }
 }
 
