@@ -35,13 +35,13 @@ namespace nancySh
                     Id = parameters.Id,
                     Version = parameters.Version,
                 });
-                return Response.AsRedirect("/");
+                return HttpStatusCode.OK;
             };
 
             Post["/update"] = parameters => {
 //                this.ValidateCsrfToken();
                 Test.Repo.Update(this.Bind<Test>());
-                return Response.AsRedirect("/");
+                return HttpStatusCode.OK;
             };
 
             Post["/new"] = _ => {
@@ -51,7 +51,7 @@ namespace nancySh
                     Id = id,
                     Val = "Test " + id,
                 });
-                return Response.AsRedirect("/");
+                return HttpStatusCode.OK;
             };
         }
 
