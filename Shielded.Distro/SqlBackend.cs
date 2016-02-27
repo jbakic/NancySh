@@ -37,8 +37,9 @@ namespace Shielded.Distro
                         return new BackendResult(true);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Debug.WriteLine(ex);
                     return new BackendResult(p);
                 }
             });

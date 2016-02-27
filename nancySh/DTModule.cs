@@ -16,25 +16,43 @@ namespace nancySh
     public class DTModule : NancyModule
     {
         internal static DTBackend Backend;
-        static Dictionary<Type, MethodInfo> _getters = new Dictionary<Type, MethodInfo>();
 
         public static void InitBackend(ServerConfig config, int myId)
         {
             Backend = new DTBackend(config, config.Servers.Single(s => s.Id == myId));
             Repository.AddBackend(Backend);
-            var ownershipQ = new OwnershipQuery { ServerId = myId, ServerCount = config.Servers.Length };
+
+            _loads = Backend.Backup == null
+                ? new Genericize(t => typeof(Repository)
+                    .GetMethod("GetLocal", BindingFlags.Public | BindingFlags.Static)
+                    .MakeGenericMethod(t.GetProperty("Id").PropertyType, t))
+                : new Genericize(t => typeof(DTModule)
+                    .GetMethod("DoubleLoad", BindingFlags.NonPublic | BindingFlags.Static)
+                    .MakeGenericMethod(t.GetProperty("Id").PropertyType, t));
+            
             foreach (var typ in Repository.KnownTypes)
             {
-                var method = typeof(Repository)
-                    .GetMethod("GetLocal", BindingFlags.Public | BindingFlags.Static)
-                    .MakeGenericMethod(typ.GetProperty("Id").PropertyType, typ);
-                _getters[typ] = method;
-
                 var ownedGetter = typeof(Repository)
                     .GetMethod("GetAll", BindingFlags.Public | BindingFlags.Static)
                     .MakeGenericMethod(typ.GetProperty("Id").PropertyType, typ);
-                ownedGetter.Invoke(null, new object[] { ownershipQ });
+                ownedGetter.Invoke(null, new object[] { Backend.Ownership });
             }
+        }
+
+        static Genericize _loads;
+
+        static IEnumerable<T> DoubleLoad<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
+        {
+            if (Repository.Owns<TKey, T>(query))
+                return Repository.GetLocal<TKey, T>(query);
+            return MergeEntities<TKey, T>(
+                Repository.GetLocal<TKey, T>(query).Concat(Backend.Backup.Query<T>(query).Result));
+        }
+
+        static IEnumerable<T> MergeEntities<TKey, T>(IEnumerable<T> source) where T : DistributedBase<TKey>
+        {
+            return source.GroupBy(e => e.Id)
+                .Select(grp => grp.Aggregate((a, b) => a.Version >= b.Version ? a : b));
         }
 
         public DTModule() : base("dt")
@@ -47,7 +65,7 @@ namespace nancySh
                 var serializer = new DataContractJsonSerializer(typeof(DataList));
                 var dataList = new DataList {
                     Entities = Repository.InTransaction(() =>
-                        ((IEnumerable<DistributedBase>)_getters[typ].Invoke(null, new[] { query }))
+                        ((IEnumerable<DistributedBase>)_loads.Get(typ).Invoke(null, new[] { query }))
                         .Select(Map.NonShieldedClone)
                         .ToList()),
                 };

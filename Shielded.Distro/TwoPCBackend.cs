@@ -10,10 +10,25 @@ namespace Shielded.Distro
     {
         public bool FailedDuringCommit { get; set; }
 
+        public TwoPCFailedException() { }
+
         public TwoPCFailedException(bool failedInCommit, AggregateException inner)
-            : base(null, inner)
+            : base(failedInCommit ? "2PC fail during commit!" : "2PC fail during prepare.", inner)
         {
             FailedDuringCommit = failedInCommit;
+        }
+    }
+
+    public class TwoPCBackupFailedException : Exception
+    {
+        public BackendResult Result { get; set; }
+
+        public TwoPCBackupFailedException() { }
+
+        public TwoPCBackupFailedException(BackendResult res)
+            : base("Backup of the 2PC backend has failed to commit.")
+        {
+            Result = res;
         }
     }
 
@@ -23,7 +38,7 @@ namespace Shielded.Distro
     /// </summary>
     public abstract class TwoPCBackend : IBackend
     {
-        protected readonly IBackend Backup;
+        public readonly IBackend Backup;
 
         protected TwoPCBackend(IBackend backup = null)
         {
@@ -48,8 +63,9 @@ namespace Shielded.Distro
                     return Commit(transId, ops).ContinueWith(commitTask => {
                         if (commitTask.Exception != null)
                             throw new TwoPCFailedException(true, commitTask.Exception);
-                        if (Backup != null)
-                            return Backup.Run(ops).Result;
+                        BackendResult res;
+                        if (Backup != null && !(res = Backup.Run(ops).Result).Ok)
+                            throw new TwoPCBackupFailedException(res);
                         return new BackendResult(true);
                     }).Result;
                 });

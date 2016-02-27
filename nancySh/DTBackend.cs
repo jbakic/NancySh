@@ -23,18 +23,18 @@ namespace nancySh
     {
         public int ServerId;
         public int ServerCount;
+        public int AllOwner;
 
-        public static bool Check(int serverId, int serverCount, DistributedBase d)
+        public static int GetOwnerId(DistributedBase d, int serverCount)
         {
-            var hash = d.IdValue.GetHashCode();
-            int first = hash % serverCount + 1;
-            int second = (first + 1) % serverCount + 1;
-            return serverId == first || serverId == second;
+            return d.IdValue.GetHashCode() % serverCount + 1;
         }
 
         public override bool Check(DistributedBase d)
         {
-            return Check(ServerId, ServerCount, d);
+            if (ServerId == AllOwner)
+                return true;
+            return GetOwnerId(d, ServerCount) == ServerId;
         }
 
         public override bool Equals(Query other)
@@ -53,13 +53,14 @@ namespace nancySh
                 hash = hash * 23 + GetType().GetHashCode();
                 hash = hash * 23 + ServerId.GetHashCode();
                 hash = hash * 23 + ServerCount.GetHashCode();
+                hash = hash * 23 + AllOwner.GetHashCode();
                 return hash;
             }
         }
 
         public override string ToString()
         {
-            return string.Format("OwnershipQuery({0}/{1})", ServerId, ServerCount);
+            return string.Format("OwnershipQuery({0}/{1},all:{2})", ServerId, ServerCount, AllOwner);
         }
     }
 
@@ -67,7 +68,8 @@ namespace nancySh
     {
         private readonly ServerConfig _config;
         private readonly int _myId;
-        private readonly OwnershipQuery _ownership;
+
+        public readonly Query Ownership;
 
         public DTBackend(ServerConfig config, Server myServer)
             : base(myServer.BackupDbConnString == null ? null :
@@ -75,13 +77,20 @@ namespace nancySh
         {
             _config = config;
             _myId = myServer.Id;
-            _ownership = new OwnershipQuery { ServerId = _myId, ServerCount = _config.Servers.Length };
+            var allOwn = _config.Servers.First(s => s.BackupDbConnString != null).Id;
+            Ownership = allOwn == _myId ? (Query)Query.All : new OwnershipQuery
+            {
+                ServerId = _myId,
+                ServerCount = _config.Servers.Length,
+                AllOwner = allOwn,
+            };
         }
 
         IEnumerable<Server> Owners(IEnumerable<DataOp> ops)
         {
             return _config.Servers.Where(s => s.Id != _myId &&
-                ops.Any(op => _ownership.Check(op.Entity)));
+                (s.BackupDbConnString != null ||
+                    ops.Any(op => OwnershipQuery.GetOwnerId(op.Entity, _config.Servers.Length) == s.Id)));
         }
 
         static Task<bool> GetResponseAsync(WebRequest req)
@@ -186,17 +195,11 @@ namespace nancySh
             }
         }
 
-        private bool OwnsQuery(Query q)
-        {
-            var ownQ = q as OwnershipQuery;
-            return ownQ != null && ownQ.ServerId == _myId;
-        }
-
         protected override QueryResult<T> DoQuery<T>(Query query)
         {
             var name = typeof(T).Name;
             Console.WriteLine("Running query {0}/{1}", name, query);
-            bool owned = OwnsQuery(query);
+            bool owned = query == Ownership;
             var res = _config.Servers.Where(s => s.Id != _myId).QueryParallelSafe(s => {
                 try
                 {
@@ -249,7 +252,7 @@ namespace nancySh
 
         public void CheckStatus<TKey, T>() where T : DistributedBase<TKey>, new()
         {
-            Repository.GetAll<TKey, T>(_ownership);
+            Repository.GetAll<TKey, T>(Ownership);
         }
     }
 }

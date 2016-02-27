@@ -4,10 +4,7 @@
         <Server Id="1" BaseUrl="http://localhost:8081">
             <BackupDbConnString>Server=localhost;User Id=josip;Password=josip;Database=politik</BackupDbConnString>
         </Server>
-        <Server Id="2" BaseUrl="http://localhost:8082">
-            <!-- Every entity is owned by 2 servers, so by having 2 write in the DB, everything is written... -->
-            <BackupDbConnString>Server=localhost;User Id=josip;Password=josip;Database=politik</BackupDbConnString>
-        </Server>
+        <Server Id="2" BaseUrl="http://localhost:8082" />
         <Server Id="3" BaseUrl="http://localhost:8083" />
     </Servers>
 </ServerConfig>

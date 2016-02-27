@@ -33,12 +33,15 @@ namespace Shielded.Distro
             public static void Import(Query query, QueryResult<T> qRes)
             {
                 ImportTransaction(() => Ref.Modify((ref TypeDict<TKey, T> d) => {
-                    ImportInt(qRes.Owned, d.Entities);
-                    if (!qRes.QueryOwned)
+                    if (qRes.QueryOwned)
+                    {
+                        ImportInt(qRes.Result, d.Entities);
+                        if (!d.OwnedQueries.Contains(query))
+                            d.OwnedQueries = d.OwnedQueries.Concat(new[] { query }).ToArray();
+                    }
+                    else
                         d.CachedQueries = d.CachedQueries.Concat(new[] {
                             Tuple.Create(query, MergeAndFilter(qRes.Result, d.Entities, query)) }).ToArray();
-                    else if (!d.OwnedQueries.Contains(query))
-                        d.OwnedQueries = d.OwnedQueries.Concat(new[] { query }).ToArray();
                 }));
             }
 
@@ -114,6 +117,11 @@ namespace Shielded.Distro
                 else
                     removed = true;
             }
+        }
+
+        public static bool OwnsQuery<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
+        {
+            return TypeDict<TKey, T>.Ref.Value.OwnedQueries.Any(q => q == query);
         }
 
         public static TRes Query<TKey, T, TRes>(QueryFunc<TKey, T, TRes> queryFunc, Query query) where T : DistributedBase<TKey>, new()
@@ -276,21 +284,18 @@ namespace Shielded.Distro
             TypeDict<TKey, T>.Ref.Modify((ref TypeDict<TKey, T> d) => {
                 foreach (var e in entities.Cast<T>())
                 {
-                    T old;
-                    if (d.Entities.TryGetValue(e.Id, out old))
+                    d.Entities.Remove(e.Id);
+                    if (d.OwnedQueries.Any(q => q.Check(e)))
                     {
-                        d.Entities.Remove(e.Id);
-                        var dropouts = d.OwnedQueries.Where(q => q.Check(old)).ToArray();
-                        d.OwnedQueries = d.OwnedQueries.Where(q => !q.Check(old)).ToArray();
+                        var dropouts = d.OwnedQueries.Where(q => q.Check(e)).ToArray();
+                        d.OwnedQueries = d.OwnedQueries.Where(q => !q.Check(e)).ToArray();
                         Shield.SideEffect(() => {
                             foreach (var lost in dropouts)
                                 ReloadTask<TKey, T>(lost);
                         });
                     }
-                    else
-                        old = e;
-                    if (d.CachedQueries.Any(cq => cq.Item1.Check(old)))
-                        d.CachedQueries = d.CachedQueries.Where(cq => !cq.Item1.Check(old)).ToArray();
+                    if (d.CachedQueries.Any(cq => cq.Item1.Check(e)))
+                        d.CachedQueries = d.CachedQueries.Where(cq => !cq.Item1.Check(e)).ToArray();
                 }
             });
         }

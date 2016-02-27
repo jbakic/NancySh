@@ -207,6 +207,11 @@ namespace Shielded.Distro
             return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => QueryCheck(dict, query), query);
         }
 
+        public static bool Owns<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
+        {
+            return EntityDictionary.OwnsQuery<TKey, T>(query);
+        }
+
         public static IEnumerable<T> GetLocal<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
             return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => QueryCheck(dict, query), null);
