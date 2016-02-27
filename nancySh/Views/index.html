@@ -7,14 +7,15 @@
 
 <script src="/js/jquery-2.2.0.min.js"></script>
 <script src="/js/bootstrap.min.js"></script>
-<script src="/js/tmpl.js"></script>
+<script src="/js/mustache.min.js"></script>
 
 <script>
 var App = {
     reload: function () {
         $.get("list", function (data) {
-            var results = document.getElementById("list");
-            results.innerHTML = tmpl("list_tmpl", { tests: data });
+            var template = $("#list-tmpl").html();
+            Mustache.parse(template);
+            $("#list").html(Mustache.render(template, { tests: data }));
         });
     },
     update: function (id, version) {
@@ -41,26 +42,26 @@ $(App.reload);
 <div id="list" class="col-lg-4">
 </div>
 
-<script type="text/html" id="list_tmpl">
+<script type="text/template" id="list-tmpl">
     <table class="table">
-    <% for ( var i = 0; i < tests.length; i++ ) { %>
+    {{#tests}}
         <tr>
             <td>
-                <%=tests[i].id%>
+                {{id}}
             </td>
             <td>
-                <form id="form<%=tests[i].id%>">
-                    <input id="val<%=tests[i].id%>" type="text" value="<%=tests[i].val%>"/>
+                <form id="form{{id}}">
+                    <input id="val{{id}}" type="text" value="{{val}}"/>
                     <input type="button" value="Edit"
-                        onclick="App.update(<%=tests[i].id%>,<%=tests[i].version%>)"/>
+                        onclick="App.update({{id}},{{version}})"/>
                 </form>
             </td>
             <td>
                 <input type="button" value="Delete"
-                    onclick="App.delete(<%=tests[i].id%>,<%=tests[i].version%>)"/>
+                    onclick="App.delete({{id}},{{version}})"/>
             </td>
         </tr>
-    <% } %>
+    {{/tests}}
     </table>
 </script>
 

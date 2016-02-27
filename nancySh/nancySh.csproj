@@ -114,7 +114,7 @@
     <None Include="js\jquery-2.2.0-vsdoc.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="js\tmpl.js">
+    <None Include="js\mustache.min.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
