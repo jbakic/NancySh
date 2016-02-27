@@ -4,7 +4,9 @@
         <Server Id="1" BaseUrl="http://localhost:8081">
             <BackupDbConnString>Server=localhost;User Id=josip;Password=josip;Database=politik</BackupDbConnString>
         </Server>
-        <Server Id="2" BaseUrl="http://localhost:8082" />
+        <Server Id="2" BaseUrl="http://localhost:8082">
+            <BackupDbConnString>Server=localhost;User Id=josip;Password=josip;Database=politik</BackupDbConnString>
+        </Server>
         <Server Id="3" BaseUrl="http://localhost:8083" />
     </Servers>
 </ServerConfig>
