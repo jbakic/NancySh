@@ -23,7 +23,6 @@ namespace nancySh
     {
         public int ServerId;
         public int ServerCount;
-        public int AllOwner;
 
         public static int GetOwnerId(DistributedBase d, int serverCount)
         {
@@ -32,8 +31,6 @@ namespace nancySh
 
         public override bool Check(DistributedBase d)
         {
-            if (ServerId == AllOwner)
-                return true;
             return GetOwnerId(d, ServerCount) == ServerId;
         }
 
@@ -53,14 +50,13 @@ namespace nancySh
                 hash = hash * 23 + GetType().GetHashCode();
                 hash = hash * 23 + ServerId.GetHashCode();
                 hash = hash * 23 + ServerCount.GetHashCode();
-                hash = hash * 23 + AllOwner.GetHashCode();
                 return hash;
             }
         }
 
         public override string ToString()
         {
-            return string.Format("OwnershipQuery({0}/{1},all:{2})", ServerId, ServerCount, AllOwner);
+            return string.Format("OwnershipQuery({0}/{1})", ServerId, ServerCount);
         }
     }
 
@@ -77,12 +73,10 @@ namespace nancySh
         {
             _config = config;
             _myId = myServer.Id;
-            var allOwn = _config.Servers.First(s => s.BackupDbConnString != null).Id;
-            Ownership = allOwn == _myId ? (Query)Query.All : new OwnershipQuery
+            Ownership = myServer.BackupDbConnString != null ? (Query)Query.All : new OwnershipQuery
             {
                 ServerId = _myId,
                 ServerCount = _config.Servers.Length,
-                AllOwner = allOwn,
             };
         }
 
@@ -232,7 +226,9 @@ namespace nancySh
         {
             return
                 Backup != null ||
-                results.Any(r => r.Item1.BackupDbConnString != null && r.Item2.QueryOwned);
+                results.Any(r => r.Item1.BackupDbConnString != null && r.Item2.QueryOwned) ||
+                // to allow them to work without any DB configured.
+                results.All(r => r.Item2.QueryOwned);
         }
 
         public bool PrepareExt(DTransaction trans)
