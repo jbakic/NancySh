@@ -213,9 +213,8 @@ namespace Shielded.Distro
 
         public static void Own<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
-            if (Shield.IsInTransaction)
-                throw new InvalidOperationException("Operation not allowed in transaction.");
-            EntityDictionary.ReloadTask<TKey, T>(query);
+            Shield.SideEffect(() =>
+                EntityDictionary.ReloadTask<TKey, T>(query));
         }
 
         public static bool Owns<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
