@@ -200,31 +200,39 @@ namespace nancySh
             var name = typeof(T).Name;
             Console.WriteLine("Running query {0}/{1}", name, query);
             bool owned = query == Ownership;
-            var res = _config.Servers.Where(s => s.Id != _myId).QueryParallelSafe(s => {
+            var results = _config.Servers.Where(s => s.Id != _myId).AsParallel().Select(s => {
                 try
                 {
                     var querySerializer = new DataContractJsonSerializer(typeof(Query));
-                    var req = WebRequest.Create(string.Format(
-                        "{0}/{1}/{2}", s.BaseUrl, "dt/query", name));
+                    var req = WebRequest.Create(string.Format("{0}/{1}/{2}", s.BaseUrl, "dt/query", name));
                     req.Method = "POST";
                     req.ContentType = "application/json";
                     querySerializer.WriteObject(req.GetRequestStream(), query);
 
                     var resp = (HttpWebResponse)req.GetResponse();
                     if (resp.StatusCode != HttpStatusCode.OK)
-                        return null;
+                        return Tuple.Create(s, new QueryResult<T>(false));
                     var listSerializer = new DataContractJsonSerializer(typeof(DataList));
                     var l = (DataList)listSerializer.ReadObject(resp.GetResponseStream());
-                    return new QueryResult<T>(owned, l.Entities != null ? l.Entities.Cast<T>() : null);
+                    return Tuple.Create(s, new QueryResult<T>(owned, l.Entities != null ? l.Entities.Cast<T>() : null));
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine("Query - {0}", ex.Message);
-                    return new QueryResult<T>(false);
+                    return Tuple.Create(s, new QueryResult<T>(false));
                 }
-            }) ?? new QueryResult<T>(owned); // if all have empty, empty is all.
-            Console.WriteLine("Loaded {0}", res.Result.Count());
-            return res;
+            }).ToArray();
+            Console.WriteLine("Loaded {0}", results.Sum(r => r.Item2.Result.Count()));
+            if (owned && IsResultComplete(results))
+                return new QueryResult<T>(true, results.SelectMany(r => r.Item2.Result));
+            return new QueryResult<T>(false, results.SelectMany(r => r.Item2.Result));
+        }
+
+        private bool IsResultComplete<T>(Tuple<Server, QueryResult<T>>[] results) where T : DistributedBase
+        {
+            return
+                Backup != null ||
+                results.Any(r => r.Item1.BackupDbConnString != null && r.Item2.QueryOwned);
         }
 
         public bool PrepareExt(DTransaction trans)

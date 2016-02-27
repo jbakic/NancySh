@@ -32,10 +32,10 @@ namespace nancySh
             
             foreach (var typ in Repository.KnownTypes)
             {
-                var ownedGetter = typeof(Repository)
-                    .GetMethod("GetAll", BindingFlags.Public | BindingFlags.Static)
+                var ownMethod = typeof(Repository)
+                    .GetMethod("Own", BindingFlags.Public | BindingFlags.Static)
                     .MakeGenericMethod(typ.GetProperty("Id").PropertyType, typ);
-                ownedGetter.Invoke(null, new object[] { Backend.Ownership });
+                ownMethod.Invoke(null, new object[] { Backend.Ownership });
             }
         }
 

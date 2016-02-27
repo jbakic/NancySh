@@ -7,6 +7,7 @@ using System.Threading;
 using System.Reflection;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace Shielded.Distro
 {
@@ -300,19 +301,24 @@ namespace Shielded.Distro
             });
         }
 
-        static void ReloadTask<TKey, T>(Query lost) where T : DistributedBase<TKey>, new()
+        public static void ReloadTask<TKey, T>(Query lost) where T : DistributedBase<TKey>, new()
         {
             Task.Run(() => {
                 int tries = 0;
-                retry: try
+                var rnd = new Random();
+                while (true)
                 {
-                    Repository.GetAll<TKey, T>(lost);
-                }
-                catch
-                {
-                    if (++tries < 10)
-                        goto retry;
-                    throw; // kills the app.
+                    try
+                    {
+                        Query<TKey, T, bool>((QueryFunc<TKey, T, bool>)(d => true), lost);
+                        if (OwnsQuery<TKey, T>(lost))
+                            return;
+                    }
+                    catch { }
+                    if (++tries >= 15)
+                        // little drastic maybe...
+                        Process.GetCurrentProcess().Kill();
+                    Thread.Sleep(rnd.Next(500, 1000));
                 }
             });
         }
