@@ -111,9 +111,13 @@ namespace Shielded.Distro
         {
             DataOp[] todos = null;
             cont.InContext(() => {
-                foreach (var entity in _ctx.ToDo.Keys)
-                    entity.Version = entity.Version + 1;
-                todos = _ctx.ToDo.Values.Select(NonShClone).ToArray();
+                todos = _ctx.ToDo.Values
+                    .Where(op => op.OpType != DataOpType.Ignore)
+                    .Select(op => {
+                        op.Entity.Version = op.Entity.Version + 1;
+                        return NonShClone(op);
+                    })
+                    .ToArray();
             });
             if (!todos.Any())
                 return Task.FromResult(new BackendResult(true));
@@ -240,9 +244,9 @@ namespace Shielded.Distro
         public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             InTransaction(() => {
-                EntityDictionary.Remove<TKey, T>(entity);
+                entity = EntityDictionary.Remove<TKey, T>(entity);
                 if (Already(entity) == DataOpType.Insert)
-                    _ctx.ToDo.Remove(entity);
+                    _ctx.ToDo[entity] = DataOp.Ignore(entity);
                 else
                     _ctx.ToDo[entity] = DataOp.Delete(entity);
             });

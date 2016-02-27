@@ -146,6 +146,13 @@ namespace Shielded.Distro
             });
         }
 
+        private static Type Normalize(Type entityType)
+        {
+            if (Factory.IsProxy(entityType))
+                return entityType.BaseType;
+            return entityType;
+        }
+
         public static T Add<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
@@ -160,7 +167,7 @@ namespace Shielded.Distro
 
         public static DistributedBase Update(DistributedBase entity)
         {
-            return (DistributedBase)_updates.Get(entity.GetType()).Invoke(null, new object[] { entity });
+            return (DistributedBase)_updates.Get(Normalize(entity.GetType())).Invoke(null, new object[] { entity });
         }
 
         private static Genericize _updates = new Genericize(t => typeof(EntityDictionary)
@@ -189,7 +196,7 @@ namespace Shielded.Distro
             return old;
         }
 
-        public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
+        public static T Remove<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
             T existing;
@@ -201,8 +208,10 @@ namespace Shielded.Distro
                 if (entity.Version < existing.Version)
                     throw new ConcurrencyException();
                 dict.Entities.Remove(entity.Id);
+                return existing;
             }
             TypeDict<TKey, T>.RemoveCached(entity);
+            return entity;
         }
 
         [ThreadStatic]

@@ -7,7 +7,8 @@ namespace Shielded.Distro
     {
         Insert,
         Update,
-        Delete
+        Delete,
+        Ignore
     }
 
     public class DataOp
@@ -32,6 +33,12 @@ namespace Shielded.Distro
         {
             entity.Version = entity.Version;
             return new DataOp { OpType = DataOpType.Delete, Entity = entity };
+        }
+
+        public static DataOp Ignore(DistributedBase entity)
+        {
+            entity.Version = entity.Version;
+            return new DataOp { OpType = DataOpType.Ignore, Entity = entity };
         }
     }
 }
