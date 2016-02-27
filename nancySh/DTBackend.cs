@@ -194,7 +194,11 @@ namespace nancySh
             var name = typeof(T).Name;
             Console.WriteLine("Running query {0}/{1}", name, query);
             bool owned = query == Ownership;
-            var results = _config.Servers.Where(s => s.Id != _myId).AsParallel().Select(s => {
+            var results = _config.Servers.Where(s => s.Id != _myId)
+                .AsParallel()
+                .WithDegreeOfParallelism(_config.Servers.Length - 1)
+                .WithExecutionMode(ParallelExecutionMode.ForceParallelism)
+                .Select(s => {
                 try
                 {
                     var querySerializer = new DataContractJsonSerializer(typeof(Query));
@@ -252,11 +256,6 @@ namespace nancySh
             Console.WriteLine("Aborting external {0}", transId);
             MsgAbort(transId);
             Console.WriteLine("Done {0}", transId);
-        }
-
-        public void CheckStatus<TKey, T>() where T : DistributedBase<TKey>, new()
-        {
-            Repository.GetAll<TKey, T>(Ownership);
         }
     }
 }

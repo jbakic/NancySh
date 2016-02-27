@@ -14,11 +14,6 @@ namespace nancySh
     {
         public HelloModule()
         {
-            Before += ctx => {
-                DTModule.Backend.CheckStatus<int, Test>();
-                return null;
-            };
-
             Get["/"] = parameters => IndexView();
 
             Get["/list"] = _ => Response.AsJson(
