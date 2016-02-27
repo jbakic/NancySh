@@ -14,7 +14,7 @@ namespace nancySh
     {
         public HelloModule()
         {
-            Get["/"] = parameters => IndexView();
+            Get["/"] = _ => View["index.html"];
 
             Get["/list"] = _ => Response.AsJson(
                 Repository.InTransaction(() => Test.Repo.GetAll()
@@ -22,7 +22,10 @@ namespace nancySh
                     .OrderBy(t => t.Id)
                     .ToArray()));
 
-            Get["/id/{Id:int}"] = parameters => ById(parameters.Id);
+            Get["/id/{Id:int}"] = parameters => Repository.InTransaction(() => {
+                int id = parameters.Id;
+                return Response.AsJson(Map.NonShieldedClone(Test.Repo.Find(id)));
+            });
 
             Post["/delete/{Id:int}/{Version:int}"] = parameters => {
 //                this.ValidateCsrfToken();
@@ -48,18 +51,6 @@ namespace nancySh
                 });
                 return HttpStatusCode.OK;
             };
-        }
-
-        private object IndexView()
-        {
-            return View["index.html"];
-        }
-
-        private object ById(int id)
-        {
-            this.CreateNewCsrfToken();
-            return View["index", new[] { Repository.InTransaction(() =>
-                Map.NonShieldedClone(Test.Repo.Find(id))) }];
         }
     }
 }
