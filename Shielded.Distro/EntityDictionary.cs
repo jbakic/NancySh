@@ -171,11 +171,10 @@ namespace Shielded.Distro
         public static T Update<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             var dict = TypeDict<TKey, T>.Ref.Value;
-            var owned = dict.OwnedQueries.Any(q => q.Check(entity));
             T old;
             if (!dict.Entities.TryGetValue(entity.Id, out old))
             {
-                if (owned)
+                if (dict.OwnedQueries.Any(q => q.Check(entity)))
                     throw new InvalidOperationException("Entity does not exist.");
                 var res = Map.ToShielded(entity);
                 TypeDict<TKey, T>.UpdateCached(res);
@@ -184,8 +183,8 @@ namespace Shielded.Distro
             if (entity.Version < old.Version)
                 throw new ConcurrencyException();
             Map.Copy(old.GetType().BaseType, entity, old);
-            if (!owned)
-                dict.Entities.Remove(entity.Id);
+            if (!dict.OwnedQueries.Any(q => q.Check(old)))
+                dict.Entities.Remove(old.Id);
             TypeDict<TKey, T>.UpdateCached(old);
             return old;
         }
