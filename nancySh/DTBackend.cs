@@ -199,27 +199,27 @@ namespace nancySh
                 .WithDegreeOfParallelism(_config.Servers.Length - 1)
                 .WithExecutionMode(ParallelExecutionMode.ForceParallelism)
                 .Select(s => {
-                try
-                {
-                    var querySerializer = new DataContractJsonSerializer(typeof(Query));
-                    var req = WebRequest.Create(string.Format("{0}/{1}/{2}", s.BaseUrl, "dt/query", name));
-                    req.Method = "POST";
-                    req.ContentType = "application/json";
-                    querySerializer.WriteObject(req.GetRequestStream(), query);
+                    try
+                    {
+                        var querySerializer = new DataContractJsonSerializer(typeof(Query));
+                        var req = WebRequest.Create(string.Format("{0}/{1}/{2}", s.BaseUrl, "dt/query", name));
+                        req.Method = "POST";
+                        req.ContentType = "application/json";
+                        querySerializer.WriteObject(req.GetRequestStream(), query);
 
-                    var resp = (HttpWebResponse)req.GetResponse();
-                    if (resp.StatusCode != HttpStatusCode.OK)
+                        var resp = (HttpWebResponse)req.GetResponse();
+                        if (resp.StatusCode != HttpStatusCode.OK)
+                            return Tuple.Create(s, new QueryResult<T>(false));
+                        var listSerializer = new DataContractJsonSerializer(typeof(DataList));
+                        var l = (DataList)listSerializer.ReadObject(resp.GetResponseStream());
+                        return Tuple.Create(s, new QueryResult<T>(owned, l.Entities != null ? l.Entities.Cast<T>() : null));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Query - {0}", ex.Message);
                         return Tuple.Create(s, new QueryResult<T>(false));
-                    var listSerializer = new DataContractJsonSerializer(typeof(DataList));
-                    var l = (DataList)listSerializer.ReadObject(resp.GetResponseStream());
-                    return Tuple.Create(s, new QueryResult<T>(owned, l.Entities != null ? l.Entities.Cast<T>() : null));
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Query - {0}", ex.Message);
-                    return Tuple.Create(s, new QueryResult<T>(false));
-                }
-            }).ToArray();
+                    }
+                }).ToArray();
             Console.WriteLine("Loaded {0}", results.Sum(r => r.Item2.Result.Count()));
             if (owned && IsResultComplete(results))
                 return new QueryResult<T>(true, results.SelectMany(r => r.Item2.Result));
