@@ -195,13 +195,15 @@ namespace Shielded.Distro
 
         static IEnumerable<T> QueryCheck<TKey, T>(IDictionary<TKey, T> dict, Query query) where T : DistributedBase<TKey>, new()
         {
-            var idQuery = query as QueryById<TKey>;
+            var idQuery = query as QueryByIds<TKey>;
             if (idQuery != null)
             {
-                T res;
-                if (dict.TryGetValue(idQuery.Id, out res))
-                    return new[] { res };
-                return Enumerable.Empty<T>();
+                return idQuery.Ids.Select(id => {
+                    T res;
+                    if (dict.TryGetValue(id, out res))
+                        return res;
+                    return null;
+                }).Where(e => e != null);
             }
             return dict.Values.Where(query.Check);
         }
@@ -231,7 +233,14 @@ namespace Shielded.Distro
         {
             return
                 EntityDictionary.Query<TKey, T, T>(dict => dict.ContainsKey(id) ? dict[id] : null, null) ??
-                EntityDictionary.Query<TKey, T, T>(dict => dict[id], new QueryById<TKey>(id));
+                EntityDictionary.Query<TKey, T, T>(dict => dict[id], new QueryByIds<TKey>(id));
+        }
+
+        public static T TryFind<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
+        {
+            return
+                EntityDictionary.Query<TKey, T, T>(dict => dict.ContainsKey(id) ? dict[id] : null, null) ??
+                EntityDictionary.Query<TKey, T, T>(dict => dict.ContainsKey(id) ? dict[id] : null, new QueryByIds<TKey>(id));
         }
 
         static DataOpType? Already(DistributedBase entity)

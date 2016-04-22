@@ -22,7 +22,7 @@ namespace Shielded.Distro
         public static void DetectQueryTypes(IEnumerable<Assembly> assemblies = null)
         {
             var qType = typeof(Query);
-            var byIdType = typeof(QueryById<>);
+            var byIdType = typeof(QueryByIds<>);
             lock (_knownTypesLock)
                 _knownTypes =
                     (_knownTypes ?? IdTypeContainer.GetTypes().Select(idt => byIdType.MakeGenericType(idt)))
@@ -45,8 +45,10 @@ namespace Shielded.Distro
 
         public override int GetHashCode()
         {
-            throw new NotImplementedException();
+            return _hashCode ?? (_hashCode = GetType().GetHashCode()).Value;
         }
+
+        int? _hashCode;
 
         public override bool Equals(object obj)
         {
@@ -104,15 +106,15 @@ namespace Shielded.Distro
         }
     }
 
-    public sealed class QueryById<T> : Query
+    public sealed class QueryByIds<T> : Query
     {
-        public T Id;
+        public T[] Ids;
 
-        public QueryById() { }
+        public QueryByIds() { }
 
-        public QueryById(T id)
+        public QueryByIds(params T[] ids)
         {
-            Id = id;
+            Ids = ids.OrderBy(id => id).ToArray();
         }
 
         static EqualityComparer<T> _comp = EqualityComparer<T>.Default;
@@ -120,13 +122,13 @@ namespace Shielded.Distro
         public override bool Check(DistributedBase entity)
         {
             var based = entity as DistributedBase<T>;
-            return based != null && _comp.Equals(based.Id, Id);
+            return based != null && Ids.Contains(based.Id);
         }
 
         public override bool Equals(Query other)
         {
-            var otherAsId = other as QueryById<T>;
-            return otherAsId != null && _comp.Equals(otherAsId.Id, Id);
+            var otherAsId = other as QueryByIds<T>;
+            return otherAsId != null && Ids.SequenceEqual(otherAsId.Ids);
         }
 
         public override int GetHashCode()
@@ -134,15 +136,16 @@ namespace Shielded.Distro
             unchecked
             {
                 var hash = 17;
-                hash = hash * 23 + GetType().GetHashCode();
-                hash = hash * 23 + Id.GetHashCode();
+                hash = hash * 23 + base.GetHashCode();
+                foreach (var id in Ids)
+                    hash = hash * 23 + id.GetHashCode();
                 return hash;
             }
         }
 
         public override string ToString()
         {
-            return string.Format("QueryById<{0}>({1})", typeof(T), Id);
+            return string.Format("QueryByIds<{0}>({1})", typeof(T), Ids);
         }
     }
 }

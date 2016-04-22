@@ -24,14 +24,17 @@ namespace nancySh
         public int ServerId;
         public int ServerCount;
 
-        public static int GetOwnerId(DistributedBase d, int serverCount)
+        public static bool Owns(DistributedBase d, int server, int serverCount)
         {
-            return d.IdValue.GetHashCode() % serverCount + 1;
+            var hash = d.IdValue.GetHashCode();
+            var test1 = hash % serverCount + 1;
+            var test2 = hash > serverCount ? (hash / serverCount) % serverCount + 1 : (test1 + 1) % serverCount + 1;
+            return server == test1 || server == test2;
         }
 
         public override bool Check(DistributedBase d)
         {
-            return GetOwnerId(d, ServerCount) == ServerId;
+            return Owns(d, ServerId, ServerCount);
         }
 
         public override bool Equals(Query other)
@@ -47,7 +50,7 @@ namespace nancySh
             unchecked
             {
                 var hash = 17;
-                hash = hash * 23 + GetType().GetHashCode();
+                hash = hash * 23 + base.GetHashCode();
                 hash = hash * 23 + ServerId.GetHashCode();
                 hash = hash * 23 + ServerCount.GetHashCode();
                 return hash;
@@ -84,7 +87,7 @@ namespace nancySh
         {
             return _config.Servers.Where(s => s.Id != _myId &&
                 (s.BackupDbConnString != null ||
-                    ops.Any(op => OwnershipQuery.GetOwnerId(op.Entity, _config.Servers.Length) == s.Id)));
+                    ops.Any(op => OwnershipQuery.Owns(op.Entity, s.Id, _config.Servers.Length))));
         }
 
         static Task<bool> GetResponseAsync(WebRequest req)
@@ -196,7 +199,7 @@ namespace nancySh
             bool owned = query == Ownership;
             var results = _config.Servers.Where(s => s.Id != _myId)
                 .AsParallel()
-                .WithDegreeOfParallelism(_config.Servers.Length - 1)
+                .WithDegreeOfParallelism(_config.Servers.Length > 1 ? _config.Servers.Length - 1 : 1)
                 .WithExecutionMode(ParallelExecutionMode.ForceParallelism)
                 .Select(s => {
                     try

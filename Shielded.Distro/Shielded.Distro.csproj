@@ -38,7 +38,7 @@
     </Reference>
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.4.2.3\lib\net40\Shielded.dll</HintPath>
+      <HintPath>..\packages\Shielded.4.2.4\lib\net40\Shielded.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

@@ -1,4 +1,5 @@
-﻿<html>
+﻿<!DOCTYPE html>
+<html>
 <head>
     <title>Portraits</title>
     <link rel="stylesheet" type="text/css" href="/Content/bootstrap.min.css"/>
@@ -10,60 +11,158 @@
 <script src="/js/mustache.min.js"></script>
 
 <script>
-var App = {
-    reload: function () {
-        $.get("list", function (data) {
-            var template = $("#list-tmpl").html();
+var CurrentPage = null;
+
+function goto(page)
+{
+    if (LoginPage.profileId === null)
+        page = LoginPage;
+    if (CurrentPage !== null)
+        CurrentPage.root().addClass("hidden");
+    CurrentPage = page;
+    CurrentPage.show().then(() =>
+        CurrentPage.root().removeClass("hidden"));
+}
+
+var LoginPage = {
+    root: function() {
+        return $("#login-root");
+    },
+    show: function() {
+        return $.get("account/all", function(ps) {
+            var template = $("#accounts-tmpl").html();
             Mustache.parse(template);
-            $("#list").html(Mustache.render(template, { tests: data }));
+            $("#accounts").html(Mustache.render(template, { profiles: ps }));
         });
     },
-    update: function (id, version) {
-        $.post("update", { Id: id, Version: version, Val: $("#val" + id).val() }, App.reload);
+
+    accountId: null,
+    existing: function(id) {
+        LoginPage.accountId = id;
+        goto(HomePage);
     },
-    delete: function (id, version) {
-        $.post("delete/" + id + "/" + version, null, App.reload);
-    },
-    newItem: function () {
-        $.post("new", null, App.reload);
+    newAccount: function() {
+        var name = $("#newOwner").val();
+        $.post("account/new", { name: name }, function(resp) {
+            LoginPage.accountId = resp.id;
+            goto(HomePage);
+        });
     }
 };
-$(App.reload);
+$(() => goto(LoginPage));
+
+var HomePage = {
+    root: function() {
+        return $("#home-root");
+    },
+    show: function() {
+        return $.get("account/" + LoginPage.accountId, function(detail) {
+            $("#ownerName").text(detail.account.owner);
+
+            var template = $("#home-tmpl").html();
+            Mustache.parse(template);
+            $("#home").html(Mustache.render(template, detail));
+        });
+    },
+    transfer: function() {
+        var target = parseInt($("#targetAccountId").val());
+        var amount = parseFloat($("#change").val());
+        $.post("account/transfer", {
+            sourceId: LoginPage.accountId,
+            targetId: target,
+            change: amount
+        }, function() {
+            HomePage.show();
+        });
+    }
+};
 </script>
 
-<div class="header col-xs-12">
-    <h1><a onclick="App.reload();" href="javascript:void;">Hello!</a></h1>
+<div class="page-header">
+    <h1><a onclick="goto(LoginPage.accountId === null ? LoginPage : HomePage);return false;" href="#">Hello!</a></h1>
 </div>
 
-<div class="col-xs-12">
-<input type="button" value="New item" onclick="App.newItem();"/>
+<div id="login-root" class="container hidden">
+    <h4>Please select an account, or enter a new one:</h4>
+    <form id="login">
+        <table class="table">
+            <tr>
+                <td>
+                    New account owner:
+                </td>
+                <td>
+                    <input type="text" id="newOwner"/>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" align="right">
+                    <input type="button" value="New" onclick="LoginPage.newAccount();"/>
+                </td>
+            </tr>
+        </table>
+    </form>
+    <div id="accounts"></div>
+    <script type="text/template" id="accounts-tmpl">
+        <ul>
+        {{#profiles}}
+            <li>
+                <a onclick="LoginPage.existing('{{id}}');return false;" href="#">{{id}} - {{name}}</a>
+            </li>
+        {{/profiles}}
+        </ul>
+    </script>
 </div>
 
-<div id="list" class="col-lg-4">
-</div>
+<div id="home-root" class="container hidden">
+    <h4>Welcome, <span id="ownerName"></span>!</h4>
+    <form id="transferForm">
+        <table class="table">
+            <tr>
+                <td colspan="2">
+                    New transfer
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    Recipient account no.:
+                </td>
+                <td>
+                    <input type="text" id="targetAccountId"/>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    Amount:
+                </td>
+                <td>
+                    <input type="text" id="change"/>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" align="right">
+                    <input type="button" value="Transfer" onclick="HomePage.transfer();"/>
+                </td>
+            </tr>
+        </table>
+    </form>
 
-<script type="text/template" id="list-tmpl">
-    <table class="table">
-    {{#tests}}
-        <tr>
-            <td>
-                {{id}}
-            </td>
-            <td>
-                <form id="form{{id}}">
-                    <input id="val{{id}}" type="text" value="{{val}}"/>
-                    <input type="button" value="Edit"
-                        onclick="App.update({{id}},{{version}})"/>
-                </form>
-            </td>
-            <td>
-                <input type="button" value="Delete"
-                    onclick="App.delete({{id}},{{version}})"/>
-            </td>
-        </tr>
-    {{/tests}}
-    </table>
-</script>
+    <h5>Transfer history:</h5>
+    <div id="home"></div>
+    <script type="text/template" id="home-tmpl">
+        <table class="table">
+        {{#bookings}}
+            <tr>
+                <td>
+                    {{utcTime}}
+                </td>
+                <td>
+                    {{change}}
+                </td>
+            </tr>
+        {{/bookings}}
+        </table>
+    </script>
+</div>
 
 </body>
 </html>

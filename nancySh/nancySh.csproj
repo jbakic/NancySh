@@ -43,9 +43,6 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="Shielded">
-      <HintPath>..\packages\Shielded.4.2.3\lib\net40\Shielded.dll</HintPath>
-    </Reference>
     <Reference Include="Npgsql">
       <HintPath>..\packages\Npgsql.3.0.5\lib\net45\Npgsql.dll</HintPath>
     </Reference>
@@ -54,6 +51,9 @@
     </Reference>
     <Reference Include="Nancy.ViewEngines.Razor">
       <HintPath>..\packages\Nancy.Viewengines.Razor.1.4.3\lib\net40\Nancy.ViewEngines.Razor.dll</HintPath>
+    </Reference>
+    <Reference Include="Shielded">
+      <HintPath>..\packages\Shielded.4.2.4\lib\net40\Shielded.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -65,7 +65,11 @@
     <Compile Include="DTModule.cs" />
     <Compile Include="ServerConfig.cs" />
     <Compile Include="DTBackend.cs" />
-    <Compile Include="Models\Test.cs" />
+    <Compile Include="Models\Account.cs" />
+    <Compile Include="Models\Booking.cs" />
+    <Compile Include="Models\AccountBookingsQuery.cs" />
+    <Compile Include="AccountModule.cs" />
+    <Compile Include="Models\AccountNumberGenerator.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Nancy.Viewengines.Razor.1.4.3\build\Nancy.ViewEngines.Razor.targets" Condition="Exists('..\packages\Nancy.Viewengines.Razor.1.4.3\build\Nancy.ViewEngines.Razor.targets')" />
@@ -117,6 +121,7 @@
     <None Include="js\mustache.min.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="Models\Test.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Views\" />
