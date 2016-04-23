@@ -12,7 +12,7 @@ namespace nancySh.Models
 
         public virtual string Owner { get; set; }
         public virtual decimal Balance { get; set; }
-        public virtual DateTime LastBoking { get; set; }
+        public virtual DateTime LastBooking { get; set; }
 
         [IgnoreDataMember]
         public IEnumerable<Booking> Bookings
@@ -31,13 +31,13 @@ namespace nancySh.Models
             var acc = Account.Repo.Insert(new Account {
                 Id = id,
                 Owner = owner,
-                LastBoking = DateTime.UtcNow,
+                LastBooking = DateTime.UtcNow,
                 Balance = initialBalance,
             });
             Repository.Insert<Guid, Booking>(new Booking {
                 Id = Guid.NewGuid(),
                 AccountId = acc.Id,
-                UtcTime = acc.LastBoking,
+                UtcTime = acc.LastBooking,
                 Change = initialBalance,
             });
             return acc;
@@ -46,7 +46,8 @@ namespace nancySh.Models
         public void Book(DateTime time, decimal change)
         {
             Balance = Balance + change;
-            LastBoking = time;
+            if (time > LastBooking)
+                LastBooking = time;
             Repository.Insert<Guid, Booking>(new Booking {
                 Id = Guid.NewGuid(),
                 AccountId = Id,

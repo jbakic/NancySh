@@ -121,7 +121,6 @@
     <None Include="js\mustache.min.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="Models\Test.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Views\" />
