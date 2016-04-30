@@ -49,21 +49,11 @@ namespace Shielded.Distro
             static ShieldedDict<TKey, T> MergeAndFilter(IEnumerable<T> source, ShieldedDict<TKey, T> entities, Query query)
             {
                 var res = new ShieldedDict<TKey, T>();
-                foreach (var entity in source.Concat(entities.Values.Where(query.Check)))
+                foreach (var entity in entities.Values.Where(query.Check).Concat(source))
                 {
                     T oldMerged;
                     if (res.TryGetValue(entity.Id, out oldMerged))
-                    {
                         Merge(entity, oldMerged);
-                        continue;
-                    }
-
-                    T oldTracked;
-                    if (entities.TryGetValue(entity.Id, out oldTracked))
-                    {
-                        Merge(entity, oldTracked);
-                        res.Add(entity.Id, oldTracked);
-                    }
                     else
                         res.Add(entity.Id, Map.ToShielded(entity));
                 }
@@ -337,12 +327,11 @@ namespace Shielded.Distro
 
         public static bool PerformExtern(IEnumerable<DataOp> ops)
         {
-            foreach (var typeGrp in ops.GroupBy(op => op.Entity.GetType()))
+            foreach (var op in ops)
             {
-                var perform = _performs.Get(typeGrp.Key);
-                foreach (var op in typeGrp)
-                    if (!(bool)perform.Invoke(null, new object[] { op.OpType, op.Entity }))
-                        return false;
+                var perform = _performs.Get(op.Entity.GetType());
+                if (!(bool)perform.Invoke(null, new object[] { op.OpType, op.Entity }))
+                    return false;
             }
             return true;
         }
@@ -373,7 +362,10 @@ namespace Shielded.Distro
                 TypeDict<TKey, T>.RemoveCached(dto);
             }
             else
+            {
                 Merge(dto, existing);
+                TypeDict<TKey, T>.UpdateCached(existing);
+            }
             return true;
         }
     }

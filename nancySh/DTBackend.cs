@@ -27,7 +27,7 @@ namespace nancySh
 
         public static bool Owns(DistributedBase d, int server, int serverCount)
         {
-            var hash = d.IdValue.GetHashCode();
+            var hash = d.IdValue.GetHashCode() & 0x7fffffff;
             var test1 = hash % serverCount + 1;
             var test2 = test1 % serverCount + 1;
             return server == test1 || server == test2;
