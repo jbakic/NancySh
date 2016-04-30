@@ -11,6 +11,10 @@ using System.Threading;
 
 namespace Shielded.Distro
 {
+    /// <summary>
+    /// Provides access to distributed objects and methods for performing
+    /// transactional operations on them.
+    /// </summary>
     public static class Repository
     {
         class TransactionMeta
@@ -18,9 +22,16 @@ namespace Shielded.Distro
             public readonly Dictionary<DistributedBase, DataOp> ToDo = new Dictionary<DistributedBase, DataOp>();
         }
 
+        /// <summary>
+        /// Default timeout of all transactions, local and external.
+        /// </summary>
         public static int TransactionTimeout = 5000;
 
         static object _knownTypesLock = new object();
+
+        /// <summary>
+        /// Gets all detected distributed entity types.
+        /// </summary>
         public static IEnumerable<Type> KnownTypes
         {
             get;
@@ -31,15 +42,16 @@ namespace Shielded.Distro
         {
             DetectEntityTypes();
             Shield.WhenCommitting<DistributedBase>(ds => {
-                if (_externTransaction || EntityDictionary.IsImporting)
-                    return;
-                if (_ctx == null)
+                if (_ctx == null && !_externTransaction && !EntityDictionary.IsImporting)
                     throw new InvalidOperationException("Distributables can only be changed in repo transactions.");
-                if (ds.Any(d => !_ctx.ToDo.ContainsKey(d)))
-                    throw new InvalidOperationException("All updates must be declared.");
             });
         }
 
+        /// <summary>
+        /// Detects distributed entity types, and runs some preparations for them. This is
+        /// important to be able to serialize entities generically.
+        /// </summary>
+        /// <param name="assemblies">Optional enumerable of assemblies to look through.</param>
         public static void DetectEntityTypes(IEnumerable<Assembly> assemblies = null)
         {
             var iDist = typeof(DistributedBase);
@@ -57,22 +69,6 @@ namespace Shielded.Distro
             }
             Debug.WriteLine("Preparing {0} types.", types.Length);
             Factory.PrepareTypes(types);
-        }
-
-        static void DetectUpdates(CommitContinuation cont)
-        {
-//            cont.InContext(tfs => {
-//                foreach (var field in tfs)
-//                {
-//                    if (!field.HasChanges)
-//                        continue;
-//                    var entity = field.Field as DistributedBase;
-//                    if (entity == null || _ctx.ToDo.ContainsKey(entity))
-//                        continue;
-//                    entity = EntityDictionary.Update(entity);
-//                    _ctx.ToDo.Add(entity, DataOp.Update(entity));
-//                }
-//            });
         }
 
         static DataOp NonShClone(DataOp source)
@@ -104,6 +100,9 @@ namespace Shielded.Distro
 
         static IBackend[] _backs = new IBackend[0];
 
+        /// <summary>
+        /// Register a new backend.
+        /// </summary>
         public static void AddBackend(IBackend back)
         {
             IBackend[] oldBacks, newBacks = _backs;
@@ -118,12 +117,16 @@ namespace Shielded.Distro
         [ThreadStatic]
         static TransactionMeta _ctx;
 
-        public static bool InTransaction(Action act)
+        /// <summary>
+        /// Run a distributed transaction. The lambda gets repeated in case of local conflicts only.
+        /// In case of failure to commit in the backends, throws a <see cref="ConcurrencyException"/>.
+        /// </summary>
+        public static void InTransaction(Action act)
         {
             if (_ctx != null)
             {
                 act();
-                return true;
+                return;
             }
 
             try
@@ -134,11 +137,21 @@ namespace Shielded.Distro
                 }))
                 {
                     if (continuation.Completed)
-                        return continuation.Committed;
-                    DetectUpdates(continuation);
+                    {
+                        if (continuation.Committed)
+                            return;
+                        throw new ConcurrencyException();
+                    }
+
+                    if (continuation.Fields.Where(tf => tf.HasChanges).Select(tf => tf.Field)
+                        .OfType<DistributedBase>().Any(d => !_ctx.ToDo.ContainsKey(d)))
+                    {
+                        throw new InvalidOperationException("All updates must be declared.");
+                    }
+
                     var distro = RunDistro(continuation);
                     if (!distro.Wait(TransactionTimeout))
-                        return false;
+                        throw new ConcurrencyException();
                     if (!distro.Result.Ok)
                     {
                         continuation.TryRollback();
@@ -146,9 +159,8 @@ namespace Shielded.Distro
                             EntityDictionary.Import(distro.Result.Update);
                         if (distro.Result.Invalidate != null)
                             EntityDictionary.Invalidate(distro.Result.Invalidate);
-                        return false;
+                        throw new ConcurrencyException();
                     }
-                    return continuation.TryCommit();
                 }
             }
             finally
@@ -157,6 +169,11 @@ namespace Shielded.Distro
             }
         }
 
+        /// <summary>
+        /// Run a distributed transaction and return its result. The lambda gets repeated in case
+        /// of local conflicts only.
+        /// In case of failure to commit in the backends, throws a <see cref="ConcurrencyException"/>.
+        /// </summary>
         public static T InTransaction<T>(Func<T> f)
         {
             T res = default(T);
@@ -184,27 +201,50 @@ namespace Shielded.Distro
             return dict.Values.Where(query.Check);
         }
 
+        /// <summary>
+        /// Get all entities of type T which satisfy the query. Executes over all backends, returning
+        /// everything known and visible at query time.
+        /// </summary>
         public static IEnumerable<T> GetAll<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
             return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => QueryCheck(dict, query), query);
         }
 
+        /// <summary>
+        /// Own the specified query. All backends will be queried for the results, and at least one
+        /// of them must succeed in producing an Owned result. On failure, retries a certain number
+        /// of times, with pauses in between, and finally crashes the process if unsuccessful.
+        /// (Subject to future change :))
+        /// This mechanism is crude - it is crucial that other servers know you own something, otherwise
+        /// your server will not be included in all transactions it should be. That will cause
+        /// differing reads from different servers, and more needless conflicts.
+        /// </summary>
         public static void Own<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
             Shield.SideEffect(() =>
                 EntityDictionary.ReloadTask<TKey, T>(query));
         }
 
+        /// <summary>
+        /// Returns true if the query is owned.
+        /// </summary>
         public static bool Owns<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
             return EntityDictionary.OwnsQuery<TKey, T>(query);
         }
 
+        /// <summary>
+        /// Get all entities of type T that we own and have locally, and that satisfy the query.
+        /// No backends get queried for this.
+        /// </summary>
         public static IEnumerable<T> GetLocal<TKey, T>(Query query) where T : DistributedBase<TKey>, new()
         {
             return EntityDictionary.Query<TKey, T, IEnumerable<T>>(dict => QueryCheck(dict, query), null);
         }
 
+        /// <summary>
+        /// Find the entity of type T with the given id, or throw otherwise.
+        /// </summary>
         public static T Find<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
         {
             return
@@ -212,6 +252,9 @@ namespace Shielded.Distro
                 EntityDictionary.Query<TKey, T, T>(dict => dict[id], new QueryByIds<TKey>(id));
         }
 
+        /// <summary>
+        /// Find the entity of type T with the given id, or return null.
+        /// </summary>
         public static T TryFind<TKey, T>(TKey id) where T : DistributedBase<TKey>, new()
         {
             return
@@ -225,6 +268,9 @@ namespace Shielded.Distro
             return _ctx.ToDo.TryGetValue(entity, out exist) ? (DataOpType?)exist.OpType : null;
         }
 
+        /// <summary>
+        /// Remove the entity.
+        /// </summary>
         public static void Remove<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
             InTransaction(() => {
@@ -239,6 +285,7 @@ namespace Shielded.Distro
         /// <summary>
         /// Returns the "live", distributed entity, which will be ref-equal to your
         /// object if it is a proxy already, or a new shielded proxy otherwise.
+        /// You may make further changes on the returned object.
         /// </summary>
         public static T Insert<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {
@@ -253,7 +300,9 @@ namespace Shielded.Distro
         }
 
         /// <summary>
-        /// Returns the "live", distributed entity.
+        /// Returns the "live", distributed entity. All updates must be declared with this
+        /// method. If you just change properties on a live entity (obtained e.g. from Find)
+        /// you will get an exception at commit.
         /// </summary>
         public static T Update<TKey, T>(T entity) where T : DistributedBase<TKey>, new()
         {

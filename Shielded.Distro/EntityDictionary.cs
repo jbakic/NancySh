@@ -11,7 +11,7 @@ using System.Diagnostics;
 
 namespace Shielded.Distro
 {
-    public delegate TRes QueryFunc<TKey, T, TRes>(IDictionary<TKey, T> dict) where T : DistributedBase<TKey>, new();
+    internal delegate TRes QueryFunc<TKey, T, TRes>(IDictionary<TKey, T> dict) where T : DistributedBase<TKey>, new();
 
     /// <summary>
     /// Global repo of all live entities.

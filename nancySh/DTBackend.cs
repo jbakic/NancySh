@@ -155,6 +155,7 @@ namespace nancySh
             var serializer = new DataContractJsonSerializer(typeof(DTransaction));
             using (var outputStream = Console.OpenStandardOutput())
                 serializer.WriteObject(outputStream, trans);
+            Console.WriteLine();
         }
 
         protected override Task Commit(Guid transactionId, IEnumerable<DataOp> ops)

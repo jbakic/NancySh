@@ -8,7 +8,7 @@ namespace nancySh.Models
     {
         public virtual int LastUsed { get; set; }
 
-        public static AccountNumberGenerator Instance
+        private static AccountNumberGenerator _instance
         {
             get
             {
@@ -22,12 +22,11 @@ namespace nancySh.Models
             }
         }
 
-        public int GetNewNumber()
+        public static int GetNewNumber()
         {
-            if (Repository.Update<int, AccountNumberGenerator>(this) != this)
-                throw new InvalidOperationException("There can be only one!");
-            LastUsed = LastUsed + 1;
-            return LastUsed;
+            var instance = Repository.Update<int, AccountNumberGenerator>(_instance);
+            instance.LastUsed = instance.LastUsed + 1;
+            return instance.LastUsed;
         }
     }
 }

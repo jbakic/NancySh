@@ -25,7 +25,7 @@ namespace nancySh.Models
 
         public static Account New(string owner, decimal initialBalance)
         {
-            var id = AccountNumberGenerator.Instance.GetNewNumber();
+            var id = AccountNumberGenerator.GetNewNumber();
             var acc = Account.Repo.Insert(new Account {
                 Id = id,
                 Owner = owner,

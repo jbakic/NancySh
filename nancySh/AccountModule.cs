@@ -81,6 +81,7 @@ namespace nancySh
                 var time = DateTime.UtcNow;
                 Account.Repo.Find(data.SourceId).Book(time, -data.Change);
                 Account.Repo.Find(data.TargetId).Book(time, data.Change);
+                return HttpStatusCode.OK;
             }));
         }
     }
