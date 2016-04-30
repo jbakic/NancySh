@@ -21,6 +21,14 @@ namespace nancySh.Models
                 });
             }
         }
+
+        public int GetNewNumber()
+        {
+            if (Repository.Update<int, AccountNumberGenerator>(this) != this)
+                throw new InvalidOperationException("There can be only one!");
+            LastUsed = LastUsed + 1;
+            return LastUsed;
+        }
     }
 }
 

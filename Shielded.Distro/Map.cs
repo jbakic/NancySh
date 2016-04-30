@@ -47,8 +47,11 @@ namespace Shielded.Distro
         {
             var properties = _properties.GetOrAdd(t, GetProperties);
             Shield.InTransaction(() => {
-                foreach (var prop in properties)
+                for (int i = 0, propertiesLength = properties.Length; i < propertiesLength; i++)
+                {
+                    var prop = properties[i];
                     prop.SetValue(dest, prop.GetValue(source));
+                }
             });
         }
 

@@ -57,6 +57,7 @@
     <Compile Include="Genericize.cs" />
     <Compile Include="BackendResult.cs" />
     <Compile Include="QueryResult.cs" />
+    <Compile Include="Accessor.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

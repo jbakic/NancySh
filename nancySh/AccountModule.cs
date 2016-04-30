@@ -66,7 +66,7 @@ namespace nancySh
 
             Get["{id:int}"] = p => LogException("get one", () => Repository.InTransaction(() => {
                 int id = p.Id;
-                var acc = Repository.TryFind<int, Account>(id);
+                var acc = Account.Repo.TryFind(id);
                 if (acc == null)
                     return HttpStatusCode.NotFound;
                 return Response.AsJson(new Detail {

@@ -25,9 +25,7 @@ namespace nancySh.Models
 
         public static Account New(string owner, decimal initialBalance)
         {
-            var generator = AccountNumberGenerator.Instance;
-            generator.LastUsed = generator.LastUsed + 1;
-            var id = generator.LastUsed;
+            var id = AccountNumberGenerator.Instance.GetNewNumber();
             var acc = Account.Repo.Insert(new Account {
                 Id = id,
                 Owner = owner,
@@ -43,7 +41,7 @@ namespace nancySh.Models
             return acc;
         }
 
-        public void Book(DateTime time, decimal change)
+        public Account Book(DateTime time, decimal change)
         {
             Balance = Balance + change;
             if (time > LastBooking)
@@ -54,6 +52,7 @@ namespace nancySh.Models
                 UtcTime = time,
                 Change = change,
             });
+            return Repo.Update(this);
         }
     }
 }

@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading.Tasks;
 using Shielded.Distro;
 using System.Runtime.Serialization.Json;
+using System.Xml;
 
 namespace nancySh
 {
@@ -28,7 +29,7 @@ namespace nancySh
         {
             var hash = d.IdValue.GetHashCode();
             var test1 = hash % serverCount + 1;
-            var test2 = hash > serverCount ? (hash / serverCount) % serverCount + 1 : (test1 + 1) % serverCount + 1;
+            var test2 = test1 % serverCount + 1;
             return server == test1 || server == test2;
         }
 
@@ -126,6 +127,7 @@ namespace nancySh
         {
             Console.WriteLine("Preparing transaction {0}", transactionId);
             var trans = new DTransaction { Id = transactionId, Operations = ops.ToList() };
+            LogTransaction(trans);
             return WhenAllMerge(transactionId,
                 Owners(ops).Select(s => {
                     try
@@ -146,6 +148,13 @@ namespace nancySh
                         return Task.FromResult(new BackendResult(false));
                     }
                 }));
+        }
+
+        void LogTransaction(DTransaction trans)
+        {
+            var serializer = new DataContractJsonSerializer(typeof(DTransaction));
+            using (var outputStream = Console.OpenStandardOutput())
+                serializer.WriteObject(outputStream, trans);
         }
 
         protected override Task Commit(Guid transactionId, IEnumerable<DataOp> ops)

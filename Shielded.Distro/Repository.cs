@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Reflection;
 using Shielded;
@@ -12,33 +11,6 @@ using System.Threading;
 
 namespace Shielded.Distro
 {
-    /// <summary>
-    /// It's annoying that one type parameter is not enough, and we always
-    /// must type in the key and then the entity type, even though the latter
-    /// completely identifies both. So, this class. If it could be static and
-    /// be base class for other classes, but so that they specify these type
-    /// args, that would be great. But no.
-    /// </summary>
-    public class Accessor<TKey, T> where T : DistributedBase<TKey>, new()
-    {
-        public IEnumerable<T> GetAll() { return Repository.GetAll<TKey, T>(Query.All); }
-
-        public T Find(TKey id) { return Repository.Find<TKey, T>(id); }
-
-        public void Remove(T entity) { Repository.Remove<TKey, T>(entity); }
-
-        /// <summary>
-        /// Returns the "live", distributed entity, which will be ref-equal to your
-        /// object if it is a proxy already, or a new shielded proxy otherwise.
-        /// </summary>
-        public T Insert(T entity) { return Repository.Insert<TKey, T>(entity); }
-
-        /// <summary>
-        /// Returns the "live", distributed entity.
-        /// </summary>
-        public T Update(T entity) { return Repository.Update<TKey, T>(entity); }
-    }
-
     public static class Repository
     {
         class TransactionMeta
@@ -59,8 +31,12 @@ namespace Shielded.Distro
         {
             DetectEntityTypes();
             Shield.WhenCommitting<DistributedBase>(ds => {
-                if (_ctx == null && !_externTransaction && !EntityDictionary.IsImporting)
+                if (_externTransaction || EntityDictionary.IsImporting)
+                    return;
+                if (_ctx == null)
                     throw new InvalidOperationException("Distributables can only be changed in repo transactions.");
+                if (ds.Any(d => !_ctx.ToDo.ContainsKey(d)))
+                    throw new InvalidOperationException("All updates must be declared.");
             });
         }
 
@@ -85,18 +61,18 @@ namespace Shielded.Distro
 
         static void DetectUpdates(CommitContinuation cont)
         {
-            cont.InContext(tfs => {
-                foreach (var field in tfs)
-                {
-                    if (!field.HasChanges)
-                        continue;
-                    var entity = field.Field as DistributedBase;
-                    if (entity == null || _ctx.ToDo.ContainsKey(entity))
-                        continue;
-                    entity = EntityDictionary.Update(entity);
-                    _ctx.ToDo.Add(entity, DataOp.Update(entity));
-                }
-            });
+//            cont.InContext(tfs => {
+//                foreach (var field in tfs)
+//                {
+//                    if (!field.HasChanges)
+//                        continue;
+//                    var entity = field.Field as DistributedBase;
+//                    if (entity == null || _ctx.ToDo.ContainsKey(entity))
+//                        continue;
+//                    entity = EntityDictionary.Update(entity);
+//                    _ctx.ToDo.Add(entity, DataOp.Update(entity));
+//                }
+//            });
         }
 
         static DataOp NonShClone(DataOp source)

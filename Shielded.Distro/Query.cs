@@ -145,7 +145,8 @@ namespace Shielded.Distro
 
         public override string ToString()
         {
-            return string.Format("QueryByIds<{0}>({1})", typeof(T), Ids);
+            return string.Format("QueryByIds<{0}>({1})", typeof(T),
+                string.Join(", ", Ids.Select(id => id.ToString())));
         }
     }
 }
